@@ -1,11 +1,12 @@
 import math
 import random
-from cscore import CameraServer # type: ignore
-import ntcore # type: ignore
-import numpy # type: ignore
-import cv2 # type: ignore
-import robotpy_apriltag # type: ignore
-import wpimath # type: ignore
+from cscore import CameraServer
+import ntcore
+import numpy
+import cv2
+import robotpy_apriltag
+from wpimath.units import rotationsToRadians
+from wpimath.geometry import Transform3d, Rotation3d, Pose3d, Translation3d, CoordinateSystem
 
 # Loading the AprilTag data
 aprilTagFieldLayout = robotpy_apriltag.AprilTagFieldLayout("TagPoses.json")
@@ -58,28 +59,30 @@ grayMat = numpy.zeros(shape=(xResolution, yResolution), dtype=numpy.uint8)
 lineColor = (0,255,0)
 
 # Position of the robot relative to the camera
-robotCam = wpimath.geometry.Transform3d(wpimath.geometry.Translation3d(0,0,1),wpimath.geometry.Rotation3d())
+robotToCam = Transform3d(Translation3d(0,0,0),Rotation3d())
 
-# Robot position
-robotPos = wpimath.geometry.Pose3d()
-
+robotPos = Pose3d()
 # Main loop
 while True:
-    cameraPose = []
-
+    robotPose = []
+    avgPose = (0,0,0)
     time, mat = cvSink.grabFrame(mat)
     grayMat = cv2.cvtColor(mat, cv2.COLOR_RGB2GRAY)
     detections = aprilTagDetector.detect(grayMat)
 
-    if (detections != []):
+
+    if detections != []:
         for detection in detections:
             tagPose = aprilTagFieldLayout.getTagPose(detection.getId())
             if tagPose is not None:
-                # Get field position, add to cameraPose
-                transform = poseEstimator.estimate(detection)
-                transformPose = wpimath.geometry.Pose3d(transform.translation(), transform.rotation())
-                temp = transformPose.transformBy(robotCam)
-                cameraPose.append(tagPose.transformBy(wpimath.geometry.Transform3d(temp.translation(), temp.rotation())))
+                # Get field position, add to robotPose
+                cameraToTag = poseEstimator.estimate(detection)
+                flipTagRotation = Rotation3d(axis=(0,1,0), angle=rotationsToRadians(0.5))
+                cameraToTag = Transform3d(cameraToTag.translation(), cameraToTag.rotation().rotateBy(flipTagRotation))
+                cameraToTag = CoordinateSystem.convert(cameraToTag, CoordinateSystem.EDN(), CoordinateSystem.NWU())
+                tagToRobot = cameraToTag.inverse()
+
+                robotPose.append(tagPose.transformBy(tagToRobot))
 
             # Draw box around all AprilTags
             for i in range(4):
@@ -88,11 +91,20 @@ while True:
                 p2 = (int(detection.getCorner(j).x), int(detection.getCorner(j).y))
                 mat = cv2.line(mat, p1, p2, lineColor, 2)
 
-    # Set position to a random pose from cameraPose, if cameraPose is empty don't
-    if cameraPose != []:
-        robotPos = random.choice(cameraPose)
+    # Set robotPos to the average position of all detections
+    if robotPose != []:
+        for pose in robotPose:
+            avgPose = (avgPose[0] + pose.x, avgPose[1] + pose.y,avgPose[2] + pose.z)
+        avgPose = (avgPose[0] / len(robotPose), avgPose[1] / len(robotPose), avgPose[2] / len(robotPose))
+        robotPos = Pose3d(Translation3d(avgPose[0],avgPose[1],avgPose[2]),Rotation3d())
 
+    # Set robotPos to the closest to the nearest pose to the last one
+    """if robotPos is not Pose3d():
+        robotPos = robotPos.nearest(robotPose)
+    else:
+        robotPos = random.choice(robotPose)
+    """
     # Publish everything
     outputStream.putFrame(mat)
-    robotCenter.set(list((round(robotPos.x, 4), round(robotPos.y, 4), round(robotPos.z, 4))))
+    robotCenter.set(list((round(robotPos.x,6),round(robotPos.y,6),round(robotPos.z,6))))
     aprilTagPresence.set(detections != [])
