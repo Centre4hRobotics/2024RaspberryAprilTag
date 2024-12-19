@@ -1,22 +1,36 @@
 import math
 import random
-from cscore import CameraServer # type: ignore
-import ntcore # type: ignore
-import numpy # type: ignore
-import cv2 # type: ignore
-import robotpy_apriltag # type: ignore
-import wpimath # type: ignore
+from cscore import CameraServer
+import ntcore
+import numpy
+import cv2
+import robotpy_apriltag
+from wpimath.units import rotationsToRadians
+from wpimath.geometry import Transform3d, Rotation3d, Pose3d, Translation3d, CoordinateSystem
 
 # Loading the AprilTag data
 aprilTagFieldLayout = robotpy_apriltag.AprilTagFieldLayout("TagPoses.json")
 
+# Load camera data
+Fx = 560.75
+Fy = 566.44
+Cx = 299.65
+Cy = 262.37
+
 poseEstimatorConfig = robotpy_apriltag.AprilTagPoseEstimator.Config(
 	0.1651,  #tag size in meters
-	543.93,  #Fx: x focal length
-	544.98,  #Fy: y focal length
-	316.29,  #Cx: x focal center (based on 640x480 resolution)
-	250.55,  #Cy: y focal center (based on 640x480 resolution)
+	Fx,
+	Fy,
+	Cx,
+	Cy,
 )
+
+cameraDistortion = numpy.float32([ 0.04, -0.101, 0.005, 0.001, 0.069 ])
+cameraIntrinsics = numpy.eye(3)
+cameraIntrinsics[0][0] = Fx
+cameraIntrinsics[1][1] = Fy
+cameraIntrinsics[0][2] = Cx
+cameraIntrinsics[1][2] = Cy
 
 # Create the PoseEstimator
 poseEstimator = robotpy_apriltag.AprilTagPoseEstimator(poseEstimatorConfig)
@@ -24,18 +38,10 @@ poseEstimator = robotpy_apriltag.AprilTagPoseEstimator(poseEstimatorConfig)
 aprilTagDetector = robotpy_apriltag.AprilTagDetector()
 aprilTagDetector.addFamily("tag36h11", 3)
 
-# Camera constants
-xResolution = 640
-yResolution = 480
-frameRate = 30
-
 # Creating the network tables
 ntInstance = ntcore.NetworkTableInstance.getDefault()
 ntInstance.startServer()
 
-camera = CameraServer.startAutomaticCapture()
-
-CameraServer.enableLogging()
 
 table = ntInstance.getTable("AprilTag Vision")
 
@@ -43,11 +49,18 @@ table = ntInstance.getTable("AprilTag Vision")
 robotCenter = table.getDoubleArrayTopic("Robot Position").publish()
 aprilTagPresence = table.getBooleanTopic("AprilTag Presence").publish()
 
+# Camera constants
+xResolution = 640
+yResolution = 480
+frameRate = 30
+
+# Activate camera stuff
+camera = CameraServer.startAutomaticCapture()
+CameraServer.enableLogging()
+
 camera.setResolution(xResolution, yResolution)
 camera.setFPS(frameRate)
-
 cvSink = CameraServer.getVideo()
-
 outputStream = CameraServer.putVideo("Vision", xResolution, yResolution)
 
 # Images
@@ -58,41 +71,74 @@ grayMat = numpy.zeros(shape=(xResolution, yResolution), dtype=numpy.uint8)
 lineColor = (0,255,0)
 
 # Position of the robot relative to the camera
-robotCam = wpimath.geometry.Transform3d(wpimath.geometry.Translation3d(0,0,1),wpimath.geometry.Rotation3d())
+robotToCam = Transform3d(Translation3d(0,0,0),Rotation3d())
 
-# Robot position
-robotPos = wpimath.geometry.Pose3d()
-
+robotPos = Pose3d()
 # Main loop
 while True:
-    cameraPose = []
+    robotPose = []
+    avgPose = (0,0,0)
 
-    time, mat = cvSink.grabFrame(mat)
+    _, mat = cvSink.grabFrame(mat)
     grayMat = cv2.cvtColor(mat, cv2.COLOR_RGB2GRAY)
     detections = aprilTagDetector.detect(grayMat)
 
-    if (detections != []):
+    if detections != []:
         for detection in detections:
+            
             tagPose = aprilTagFieldLayout.getTagPose(detection.getId())
+
             if tagPose is not None:
-                # Get field position, add to cameraPose
-                transform = poseEstimator.estimate(detection)
-                transformPose = wpimath.geometry.Pose3d(transform.translation(), transform.rotation())
-                temp = transformPose.transformBy(robotCam)
-                cameraPose.append(tagPose.transformBy(wpimath.geometry.Transform3d(temp.translation(), temp.rotation())))
 
-            # Draw box around all AprilTags
-            for i in range(4):
-                j = (i + 1) % 4
-                p1 = (int(detection.getCorner(i).x), int(detection.getCorner(i).y))
-                p2 = (int(detection.getCorner(j).x), int(detection.getCorner(j).y))
-                mat = cv2.line(mat, p1, p2, lineColor, 2)
+                corners = list(detection.getCorners(numpy.empty(8)))
 
-    # Set position to a random pose from cameraPose, if cameraPose is empty don't
-    if cameraPose != []:
-        robotPos = random.choice(cameraPose)
+		        # Outline the tag using original corners
+                for i in range(4):
+                    j = (i + 1) % 4
+                    p1 = (int(corners[2 * i]),int(corners[2 * i + 1]))
+                    p2 = (int(corners[2 * j]),int(corners[2 * j + 1]))
+                    mat = cv2.line(mat, p1, p2, lineColor, 2)
+
+                # Manually reshape 'corners'
+                distortedCorners = numpy.empty([4,2], dtype=numpy.float32)
+                for i in range(4):
+                    distortedCorners[i][0] = corners[2 * i]
+                    distortedCorners[i][1] = corners[2 * i + 1]
+
+                # run the OpenCV undistortion routine to fix the corners
+                undistortedCorners = cv2.undistortImagePoints(distortedCorners, cameraIntrinsics, cameraDistortion)
+                for i in range(4):
+                    corners[2 * i] = undistortedCorners[i][0][0]
+                    corners[2 * i + 1] = undistortedCorners[i][0][1]
+
+                # run the pose estimator using the fixed corners
+                cameraToTag = poseEstimator.estimate(
+                    homography = detection.getHomography(),
+                    corners = tuple(corners))
+                tagID = detection.getId()
+                
+                if tagPose is not None:
+                    # first we need to flip the Camera To Tag transform's angle 180 degrees around the y axis since the tag is oriented into the field
+                    flipTagRotation = Rotation3d(axis = (0, 1, 0), angle = rotationsToRadians(0.5))
+                    cameraToTag = Transform3d(cameraToTag.translation(), cameraToTag.rotation().rotateBy(flipTagRotation))
+
+                    # The Camera To Tag transform is in a East/Down/North coordinate system, but we want it in the WPILib standard North/West/Up
+                    cameraToTag = CoordinateSystem.convert(cameraToTag, CoordinateSystem.EDN(), CoordinateSystem.NWU())
+
+                    # We now have a corrected transform from the camera to the tag. Apply the inverse transform to the tag pose to get the camera's pose
+                    cameraPose = tagPose.transformBy(cameraToTag.inverse())
+
+                    # compute robot pose from robot to camera transform
+                    robotPose.append(cameraPose.transformBy(robotToCam.inverse()))
+
+    # Set robotPos to the average position of all detections
+    if robotPose != []:
+        for pose in robotPose:
+            avgPose = (avgPose[0] + pose.x, avgPose[1] + pose.y,avgPose[2] + pose.z)
+        avgPose = (avgPose[0] / len(robotPose), avgPose[1] / len(robotPose), avgPose[2] / len(robotPose))
+        robotPos = Pose3d(Translation3d(avgPose[0],avgPose[1],avgPose[2]),Rotation3d())
 
     # Publish everything
     outputStream.putFrame(mat)
-    robotCenter.set(list((round(robotPos.x, 4), round(robotPos.y, 4), round(robotPos.z, 4))))
+    robotCenter.set(list((round(robotPos.x,6),round(robotPos.y,6),-1 * round(robotPos.z,6))))
     aprilTagPresence.set(detections != [])
