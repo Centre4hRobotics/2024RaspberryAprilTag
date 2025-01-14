@@ -46,8 +46,12 @@ ntInstance.startServer()
 table = ntInstance.getTable("AprilTag Vision")
 
 # Export robot position
-robotCenter = table.getDoubleArrayTopic("Robot Position").publish()
+robotCenter = table.getDoubleArrayTopic("Robot Global Position").publish()
+localPos = table.getDoubleArrayTopic("Localized Pose").publish()
+tagRotation = table.getDoubleTopic("Tag Rotation").publish()
 aprilTagPresence = table.getBooleanTopic("AprilTag Presence").publish()
+widestTag = table.getIntegerTopic("Widest Tag ID").publish()
+#allTags = table.getIntegerArrayTopic("All detected tags").publish()
 
 # Camera constants
 xResolution = 640
@@ -74,8 +78,13 @@ lineColor = (0,255,0)
 robotToCam = Transform3d(Translation3d(0,0,0),Rotation3d())
 
 robotPos = Pose3d()
+bestPose = Pose3d()
+bestTag = -1
+
+
 # Main loop
 while True:
+    maxTagWidth = 0.0
     robotPose = []
     avgPose = (0,0,0)
 
@@ -88,48 +97,57 @@ while True:
             
             tagPose = aprilTagFieldLayout.getTagPose(detection.getId())
 
+            corners = list(detection.getCorners(numpy.empty(8)))
+
+            # Outline the tag using original corners
+            for i in range(4):
+                j = (i + 1) % 4
+                p1 = (int(corners[2 * i]),int(corners[2 * i + 1]))
+                p2 = (int(corners[2 * j]),int(corners[2 * j + 1]))
+                mat = cv2.line(mat, p1, p2, lineColor, 2)
+
+            # Manually reshape 'corners'
+            distortedCorners = numpy.empty([4,2], dtype=numpy.float32)
+            for i in range(4):
+                distortedCorners[i][0] = corners[2 * i]
+                distortedCorners[i][1] = corners[2 * i + 1]
+
+            # run the OpenCV undistortion routine to fix the corners
+            undistortedCorners = cv2.undistortImagePoints(distortedCorners, cameraIntrinsics, cameraDistortion)
+            for i in range(4):
+                corners[2 * i] = undistortedCorners[i][0][0]
+                corners[2 * i + 1] = undistortedCorners[i][0][1]
+
+            # find the widest tag
+            if corners[3]-corners[2] > maxTagWidth:
+                maxTagWidth = corners[3]-corners[2]
+                bestTag = detection.getId()
+
+            # run the pose estimator using the fixed corners
+            cameraToTag = poseEstimator.estimate(
+                homography = detection.getHomography(),
+                corners = tuple(corners))
+            tagID = detection.getId()
+            
+            # first we need to flip the Camera To Tag transform's angle 180 degrees around the y axis since the tag is oriented into the field
+            flipTagRotation = Rotation3d(axis = (0, 1, 0), angle = rotationsToRadians(0.5))
+            cameraToTag = Transform3d(cameraToTag.translation(), cameraToTag.rotation().rotateBy(flipTagRotation))
+
+            # The Camera To Tag transform is in a East/Down/North coordinate system, but we want it in the WPILib standard North/West/Up
+            cameraToTag = CoordinateSystem.convert(cameraToTag, CoordinateSystem.EDN(), CoordinateSystem.NWU())
+
+            if detection.getId() == bestTag:
+                bestPose = cameraToTag
+                
             if tagPose is not None:
 
-                corners = list(detection.getCorners(numpy.empty(8)))
+                 # We now have a corrected transform from the camera to the tag. Apply the inverse transform to the tag pose to get the camera's pose
+                cameraPose = tagPose.transformBy(cameraToTag.inverse())
 
-		        # Outline the tag using original corners
-                for i in range(4):
-                    j = (i + 1) % 4
-                    p1 = (int(corners[2 * i]),int(corners[2 * i + 1]))
-                    p2 = (int(corners[2 * j]),int(corners[2 * j + 1]))
-                    mat = cv2.line(mat, p1, p2, lineColor, 2)
-
-                # Manually reshape 'corners'
-                distortedCorners = numpy.empty([4,2], dtype=numpy.float32)
-                for i in range(4):
-                    distortedCorners[i][0] = corners[2 * i]
-                    distortedCorners[i][1] = corners[2 * i + 1]
-
-                # run the OpenCV undistortion routine to fix the corners
-                undistortedCorners = cv2.undistortImagePoints(distortedCorners, cameraIntrinsics, cameraDistortion)
-                for i in range(4):
-                    corners[2 * i] = undistortedCorners[i][0][0]
-                    corners[2 * i + 1] = undistortedCorners[i][0][1]
-
-                # run the pose estimator using the fixed corners
-                cameraToTag = poseEstimator.estimate(
-                    homography = detection.getHomography(),
-                    corners = tuple(corners))
-                tagID = detection.getId()
-                
-                if tagPose is not None:
-                    # first we need to flip the Camera To Tag transform's angle 180 degrees around the y axis since the tag is oriented into the field
-                    flipTagRotation = Rotation3d(axis = (0, 1, 0), angle = rotationsToRadians(0.5))
-                    cameraToTag = Transform3d(cameraToTag.translation(), cameraToTag.rotation().rotateBy(flipTagRotation))
-
-                    # The Camera To Tag transform is in a East/Down/North coordinate system, but we want it in the WPILib standard North/West/Up
-                    cameraToTag = CoordinateSystem.convert(cameraToTag, CoordinateSystem.EDN(), CoordinateSystem.NWU())
-
-                    # We now have a corrected transform from the camera to the tag. Apply the inverse transform to the tag pose to get the camera's pose
-                    cameraPose = tagPose.transformBy(cameraToTag.inverse())
-
-                    # compute robot pose from robot to camera transform
-                    robotPose.append(cameraPose.transformBy(robotToCam.inverse()))
+                # compute robot pose from robot to camera transform
+                robotPose.append(cameraPose.transformBy(robotToCam.inverse()))
+            
+            
 
     # Set robotPos to the average position of all detections
     if robotPose != []:
@@ -141,4 +159,7 @@ while True:
     # Publish everything
     outputStream.putFrame(mat)
     robotCenter.set(list((round(robotPos.x,6),round(robotPos.y,6),-1 * round(robotPos.z,6))))
+    localPos.set(list((round(bestPose.x,6),round(bestPose.y,6),-1 * round(bestPose.z,6))))
+    tagRotation.set(bestPose.rotation().z)
     aprilTagPresence.set(detections != [])
+    widestTag.set(bestTag)
