@@ -8,6 +8,9 @@ import robotpy_apriltag
 from wpimath.units import rotationsToRadians
 from wpimath.geometry import Transform3d, Rotation3d, Pose3d, Translation3d, CoordinateSystem
 
+isTableHost = False
+teamNumber = 7204
+
 # Loading the AprilTag data
 aprilTagFieldLayout = robotpy_apriltag.AprilTagFieldLayout("TagPoses.json")
 
@@ -40,7 +43,13 @@ aprilTagDetector.addFamily("tag36h11", 3)
 
 # Creating the network tables
 ntInstance = ntcore.NetworkTableInstance.getDefault()
-ntInstance.startServer()
+
+if isTableHost:
+    ntInstance.startServer()
+else:
+    ntInstance.setServerTeam(teamNumber)
+    ntInstance.startClient4()
+
 
 
 table = ntInstance.getTable("AprilTag Vision")
