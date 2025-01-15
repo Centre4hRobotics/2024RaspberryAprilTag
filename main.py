@@ -8,6 +8,7 @@ import robotpy_apriltag
 from wpimath.units import rotationsToRadians
 from wpimath.geometry import Transform3d, Rotation3d, Pose3d, Translation3d, CoordinateSystem
 
+# Flags and Team Number
 isTableHost = False
 teamNumber = 7204
 
@@ -44,13 +45,12 @@ aprilTagDetector.addFamily("tag36h11", 3)
 # Creating the network tables
 ntInstance = ntcore.NetworkTableInstance.getDefault()
 
+# Check network tables host flag
 if isTableHost:
     ntInstance.startServer()
 else:
     ntInstance.setServerTeam(teamNumber)
     ntInstance.startClient4()
-
-
 
 table = ntInstance.getTable("AprilTag Vision")
 
