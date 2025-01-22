@@ -50,7 +50,7 @@ if isTableHost:
     ntInstance.startServer()
 else:
     ntInstance.setServerTeam(teamNumber)
-    ntInstance.startClient4()
+    ntInstance.startClient4("visionPi")
 
 table = ntInstance.getTable("AprilTag Vision")
 
@@ -84,7 +84,7 @@ grayMat = numpy.zeros(shape=(xResolution, yResolution), dtype=numpy.uint8)
 lineColor = (0,255,0)
 
 # Position of the robot relative to the camera
-robotToCam = Transform3d(Translation3d(0,0,0),Rotation3d())
+robotToCam = Transform3d(Translation3d(0.255,0,0),Rotation3d())
 
 robotPos = Pose3d()
 bestPose = Pose3d()
@@ -103,7 +103,7 @@ while True:
 
     if detections != []:
         for detection in detections:
-            
+
             tagPose = aprilTagFieldLayout.getTagPose(detection.getId())
 
             corners = list(detection.getCorners(numpy.empty(8)))
@@ -128,8 +128,8 @@ while True:
                 corners[2 * i + 1] = undistortedCorners[i][0][1]
 
             # find the widest tag
-            if corners[3]-corners[2] > maxTagWidth:
-                maxTagWidth = corners[3]-corners[2]
+            if corners[2]-corners[0] > maxTagWidth:
+                maxTagWidth = corners[2]-corners[0]
                 bestTag = detection.getId()
 
             # run the pose estimator using the fixed corners
@@ -137,7 +137,7 @@ while True:
                 homography = detection.getHomography(),
                 corners = tuple(corners))
             tagID = detection.getId()
-            
+
             # first we need to flip the Camera To Tag transform's angle 180 degrees around the y axis since the tag is oriented into the field
             flipTagRotation = Rotation3d(axis = (0, 1, 0), angle = rotationsToRadians(0.5))
             cameraToTag = Transform3d(cameraToTag.translation(), cameraToTag.rotation().rotateBy(flipTagRotation))
@@ -145,18 +145,18 @@ while True:
             # The Camera To Tag transform is in a East/Down/North coordinate system, but we want it in the WPILib standard North/West/Up
             cameraToTag = CoordinateSystem.convert(cameraToTag, CoordinateSystem.EDN(), CoordinateSystem.NWU())
 
-            if detection.getId() == bestTag:
-                bestPose = cameraToTag
-                
-            if tagPose is not None:
+            robotToTag = robotToCam + cameraToTag
 
+            if detection.getId() == bestTag:
+                bestPose = robotToTag
+
+            if tagPose is not None:
                  # We now have a corrected transform from the camera to the tag. Apply the inverse transform to the tag pose to get the camera's pose
-                cameraPose = tagPose.transformBy(cameraToTag.inverse())
+                cameraPose = tagPose.transformBy(robotToTag.inverse())
 
                 # compute robot pose from robot to camera transform
-                robotPose.append(cameraPose.transformBy(robotToCam.inverse()))
-            
-            
+                robotPose.append(cameraPose)
+
 
     # Set robotPos to the average position of all detections
     if robotPose != []:
@@ -170,5 +170,6 @@ while True:
     robotCenter.set(list((round(robotPos.x,6),round(robotPos.y,6),-1 * round(robotPos.z,6))))
     localPos.set(list((round(bestPose.x,6),round(bestPose.y,6),-1 * round(bestPose.z,6))))
     tagRotation.set(bestPose.rotation().z)
+
     aprilTagPresence.set(detections != [])
     widestTag.set(bestTag)
