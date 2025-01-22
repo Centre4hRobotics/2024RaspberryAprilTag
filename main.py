@@ -55,8 +55,11 @@ else:
 table = ntInstance.getTable("AprilTag Vision")
 
 # Export robot position
-robotCenter = table.getDoubleArrayTopic("Robot Global Position").publish()
-localPos = table.getDoubleArrayTopic("Localized Pose").publish()
+#robotCenter = table.getDoubleArrayTopic("Robot Global Position").publish()
+#localPos = table.getDoubleArrayTopic("Localized Pose").publish()
+localPosX = table.getDoubleTopic("Pose X").publish()
+localPosY = table.getDoubleTopic("Pose Y").publish()
+localPosZ = table.getDoubleTopic("Pose Z").publish()
 tagRotation = table.getDoubleTopic("Tag Rotation").publish()
 aprilTagPresence = table.getBooleanTopic("AprilTag Presence").publish()
 widestTag = table.getIntegerTopic("Widest Tag ID").publish()
@@ -84,7 +87,7 @@ grayMat = numpy.zeros(shape=(xResolution, yResolution), dtype=numpy.uint8)
 lineColor = (0,255,0)
 
 # Position of the robot relative to the camera
-robotToCam = Transform3d(Translation3d(0.255,0,0),Rotation3d())
+robotToCam = Transform3d(Translation3d(-0.255,0,0),Rotation3d())
 
 robotPos = Pose3d()
 bestPose = Pose3d()
@@ -167,9 +170,12 @@ while True:
 
     # Publish everything
     outputStream.putFrame(mat)
-    robotCenter.set(list((round(robotPos.x,6),round(robotPos.y,6),-1 * round(robotPos.z,6))))
+    #robotCenter.set(list((round(robotPos.x,6),round(robotPos.y,6),-1 * round(robotPos.z,6))))
     localPos.set(list((round(bestPose.x,6),round(bestPose.y,6),-1 * round(bestPose.z,6))))
     tagRotation.set(bestPose.rotation().z)
+    localPosX.set(bestPose.x)
+    localPosY.set(bestPose.y)
+    localPosZ.set(bestPose.z)
 
     aprilTagPresence.set(detections != [])
     widestTag.set(bestTag)
