@@ -171,7 +171,7 @@ while True:
     # Publish everything
     outputStream.putFrame(mat)
     #robotCenter.set(list((round(robotPos.x,6),round(robotPos.y,6),-1 * round(robotPos.z,6))))
-    localPos.set(list((round(bestPose.x,6),round(bestPose.y,6),-1 * round(bestPose.z,6))))
+    #localPos.set(list((round(bestPose.x,6),round(bestPose.y,6),-1 * round(bestPose.z,6))))
     tagRotation.set(bestPose.rotation().z)
     localPosX.set(bestPose.x)
     localPosY.set(bestPose.y)
