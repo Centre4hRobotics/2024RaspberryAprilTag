@@ -42,6 +42,18 @@ poseEstimator = robotpy_apriltag.AprilTagPoseEstimator(poseEstimatorConfig)
 aprilTagDetector = robotpy_apriltag.AprilTagDetector()
 aprilTagDetector.addFamily("tag36h11", 3)
 
+aprilTagDetectorConfig = aprilTagDetector.getConfig()
+aprilTagDetectorConfig.numThreads = 4
+aprilTagDetectorConfig.quadSigma = 0.5
+aprilTagDetectorConfig.quadDecimate = 1
+aprilTagDetector.setConfig(aprilTagDetectorConfig)
+
+quadThresholdParameters = aprilTagDetector.getQuadThresholdParameters()
+quadThresholdParameters.minClusterPixels = 5
+quadThresholdParameters.criticalAngle = 0.79
+aprilTagDetector.setQuadThresholdParameters(quadThresholdParameters)
+
+
 # Creating the network tables
 ntInstance = ntcore.NetworkTableInstance.getDefault()
 
