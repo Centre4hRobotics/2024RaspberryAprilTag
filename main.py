@@ -17,22 +17,21 @@ cameraProfile = "640x480"
 
 
 # Flags and Team Number
-isTableHost = False
+isTableHost = True
 teamNumber = 7204
 
 # Loading the AprilTag data
 aprilTagFieldLayout = robotpy_apriltag.AprilTagFieldLayout("TagPoses.json")
 
 # Load camera data
-Fx = 560.75
-Fy = 566.44
-Cx = 299.65
-Cy = 262.37
-
 Fx = data[cameraProfile]["Intrinsics"]["Fx"]
 Fy = data[cameraProfile]["Intrinsics"]["Fy"]
 Cx = data[cameraProfile]["Intrinsics"]["Cx"]
 Cy = data[cameraProfile]["Intrinsics"]["Cy"]
+
+xResolution = data[cameraProfile]["Resolution"]["x"]
+yResolution = data[cameraProfile]["Resolution"]["y"]
+frameRate = 30
 
 poseEstimatorConfig = robotpy_apriltag.AprilTagPoseEstimator.Config(
 	0.1651,  #tag size in meters
@@ -85,20 +84,12 @@ else:
 table = ntInstance.getTable("AprilTag Vision")
 
 # Export robot position
-#robotCenter = table.getDoubleArrayTopic("Robot Global Position").publish()
-#localPos = table.getDoubleArrayTopic("Localized Pose").publish()
 localPosX = table.getDoubleTopic("Pose X").publish()
 localPosY = table.getDoubleTopic("Pose Y").publish()
 localPosZ = table.getDoubleTopic("Pose Z").publish()
 tagRotation = table.getDoubleTopic("Tag Rotation").publish()
 aprilTagPresence = table.getBooleanTopic("AprilTag Presence").publish()
 widestTag = table.getIntegerTopic("Widest Tag ID").publish()
-#allTags = table.getIntegerArrayTopic("All detected tags").publish()
-
-# Camera constants
-xResolution = data[cameraProfile]["Resolution"]["x"]
-yResolution = data[cameraProfile]["Resolution"]["y"]
-frameRate = 30
 
 # Activate camera stuff
 camera = CameraServer.startAutomaticCapture()
@@ -200,8 +191,6 @@ while True:
 
     # Publish everything
     outputStream.putFrame(mat)
-    #robotCenter.set(list((round(robotPos.x,6),round(robotPos.y,6),-1 * round(robotPos.z,6))))
-    #localPos.set(list((round(bestPose.x,6),round(bestPose.y,6),-1 * round(bestPose.z,6))))
     tagRotation.set(bestPose.rotation().z)
     localPosX.set(bestPose.x)
     localPosY.set(bestPose.y)
