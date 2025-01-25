@@ -7,7 +7,14 @@ import cv2
 import robotpy_apriltag
 from wpimath.units import rotationsToRadians
 from wpimath.geometry import Transform3d, Rotation3d, Pose3d, Translation3d, CoordinateSystem
+import json
 
+
+with open('CameraCalibration.json') as json_data:
+    data = json.load(json_data)
+
+for i in data['Profiles']:
+    print(i)
 # Flags and Team Number
 isTableHost = False
 teamNumber = 7204
