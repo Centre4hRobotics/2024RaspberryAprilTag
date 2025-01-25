@@ -13,8 +13,9 @@ import json
 with open('CameraCalibration.json') as json_data:
     data = json.load(json_data)
 
-for i in data['Profiles']:
-    print(i)
+cameraProfile = "640x480"
+
+
 # Flags and Team Number
 isTableHost = False
 teamNumber = 7204
@@ -28,6 +29,11 @@ Fy = 566.44
 Cx = 299.65
 Cy = 262.37
 
+Fx = data[cameraProfile]["Intrinsics"]["Fx"]
+Fy = data[cameraProfile]["Intrinsics"]["Fy"]
+Cx = data[cameraProfile]["Intrinsics"]["Cx"]
+Cy = data[cameraProfile]["Intrinsics"]["Cy"]
+
 poseEstimatorConfig = robotpy_apriltag.AprilTagPoseEstimator.Config(
 	0.1651,  #tag size in meters
 	Fx,
@@ -36,7 +42,12 @@ poseEstimatorConfig = robotpy_apriltag.AprilTagPoseEstimator.Config(
 	Cy,
 )
 
-cameraDistortion = numpy.float32([ 0.04, -0.101, 0.005, 0.001, 0.069 ])
+cameraDistortion = numpy.float32([
+    data[cameraProfile]["Distortion"]["A"],
+    data[cameraProfile]["Distortion"]["B"],
+    data[cameraProfile]["Distortion"]["C"],
+    data[cameraProfile]["Distortion"]["D"],
+    data[cameraProfile]["Distortion"]["E"] ])
 cameraIntrinsics = numpy.eye(3)
 cameraIntrinsics[0][0] = Fx
 cameraIntrinsics[1][1] = Fy
@@ -85,8 +96,8 @@ widestTag = table.getIntegerTopic("Widest Tag ID").publish()
 #allTags = table.getIntegerArrayTopic("All detected tags").publish()
 
 # Camera constants
-xResolution = 640
-yResolution = 480
+xResolution = data[cameraProfile]["Resolution"]["x"]
+yResolution = data[cameraProfile]["Resolution"]["y"]
 frameRate = 30
 
 # Activate camera stuff
