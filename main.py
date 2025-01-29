@@ -1,5 +1,4 @@
-import math
-import random
+import json
 from cscore import CameraServer
 import ntcore
 import numpy
@@ -7,7 +6,6 @@ import cv2
 import robotpy_apriltag
 from wpimath.units import rotationsToRadians
 from wpimath.geometry import Transform3d, Rotation3d, Pose3d, Translation3d, CoordinateSystem
-import json
 
 
 with open('CameraCalibration.json') as json_data:
@@ -53,7 +51,7 @@ cameraIntrinsics[1][1] = Fy
 cameraIntrinsics[0][2] = Cx
 cameraIntrinsics[1][2] = Cy
 
-# Create the PoseEstimator
+# Create the PoseEstimator & adjust its settings
 poseEstimator = robotpy_apriltag.AprilTagPoseEstimator(poseEstimatorConfig)
 
 aprilTagDetector = robotpy_apriltag.AprilTagDetector()
@@ -92,12 +90,21 @@ aprilTagPresence = table.getBooleanTopic("AprilTag Presence").publish()
 widestTag = table.getIntegerTopic("Widest Tag ID").publish()
 
 # Activate camera stuff
-camera = CameraServer.startAutomaticCapture()
-CameraServer.enableLogging()
 
-camera.setResolution(xResolution, yResolution)
-camera.setFPS(frameRate)
-cvSink = CameraServer.getVideo()
+CameraServer.enableLogging()
+cameraLeft = CameraServer.startAutomaticCapture(0)
+cameraRight = CameraServer.startAutomaticCapture(1)
+cameraLeft.setConnectionStrategy(VideoSource.ConnectionStrategy.kConnectionKeepOpen)
+cameraRight.setConnectionStrategy(VideoSource.ConnectionStrategy.kConnectionKeepOpen)
+CameraServer.waitForever()
+
+cameraLeft.setResolution(xResolution, yResolution)
+cameraRight.setResolution(xResolution, yResolution)
+
+cameraLeft.setFPS(frameRate)
+cameraRight.setFPS(frameRate)
+
+cvSink = CameraServer.getVideo(cameraLeft)
 outputStream = CameraServer.putVideo("Vision", xResolution, yResolution)
 
 # Images
@@ -108,12 +115,13 @@ grayMat = numpy.zeros(shape=(xResolution, yResolution), dtype=numpy.uint8)
 lineColor = (0,255,0)
 
 # Position of the robot relative to the camera
-robotToCam = Transform3d(Translation3d(-0.255,0,0),Rotation3d())
+robotToCam = Transform3d(Translation3d(0,0,0),Rotation3d())
 
 robotPos = Pose3d()
 bestPose = Pose3d()
 bestTag = -1
 
+reefTags = [17]
 
 # Main loop
 while True:
@@ -121,13 +129,20 @@ while True:
     robotPose = []
     avgPose = (0,0,0)
 
+    if leftCamera:
+        cvSink = CameraServer.getVideo(cameraLeft)
+    else:
+        cvSink = CameraServer.getVideo(cameraRight)
+
+
     _, mat = cvSink.grabFrame(mat)
     grayMat = cv2.cvtColor(mat, cv2.COLOR_RGB2GRAY)
     detections = aprilTagDetector.detect(grayMat)
 
     if detections != []:
         for detection in detections:
-
+            if not detection.getId() in reefTags:
+                continue
             tagPose = aprilTagFieldLayout.getTagPose(detection.getId())
 
             corners = list(detection.getCorners(numpy.empty(8)))
@@ -175,7 +190,7 @@ while True:
                 bestPose = robotToTag
 
             if tagPose is not None:
-                 # We now have a corrected transform from the camera to the tag. Apply the inverse transform to the tag pose to get the camera's pose
+                # We now have a corrected transform from the camera to the tag. Apply the inverse transform to the tag pose to get the camera's pose
                 cameraPose = tagPose.transformBy(robotToTag.inverse())
 
                 # compute robot pose from robot to camera transform
@@ -183,7 +198,7 @@ while True:
 
 
     # Set robotPos to the average position of all detections
-    if robotPose != []:
+    if robotPose:
         for pose in robotPose:
             avgPose = (avgPose[0] + pose.x, avgPose[1] + pose.y,avgPose[2] + pose.z)
         avgPose = (avgPose[0] / len(robotPose), avgPose[1] / len(robotPose), avgPose[2] / len(robotPose))
