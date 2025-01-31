@@ -98,16 +98,15 @@ leftCameraStr = leftCameraB.get()
 # Activate camera stuff
 print("a")
 CameraServer.enableLogging()
-
+print("a1")
 cameraLeft = CameraServer.startAutomaticCapture(0)
-
-cameraRight = CameraServer.startAutomaticCapture(1)
+print("a2")
+cameraRight = CameraServer.startAutomaticCapture(2)
 
 print("b")
 
 cameraLeft.setResolution(xResolution, yResolution)
 cameraLeft.setFPS(frameRate)
-
 print("c")
 cameraRight.setResolution(xResolution, yResolution)
 cameraRight.setFPS(frameRate)
@@ -142,7 +141,8 @@ while True:
         print("h right")
     print("i")
 
-    mat = cvSink.grabFrame(mat)
+    _, mat = cvSink.grabFrame(mat)
+    print("k")
     grayMat = cv2.cvtColor(mat, cv2.COLOR_RGB2GRAY)
     print("j")
     detections = aprilTagDetector.detect(grayMat)
@@ -198,12 +198,6 @@ while True:
                 bestPose = robotToTag
 
     # Set robotPos to the average position of all detections
-    if robotPose:
-        for pose in robotPose:
-            avgPose = (avgPose[0] + pose.x, avgPose[1] + pose.y,avgPose[2] + pose.z)
-        avgPose = (avgPose[0] / len(robotPose), avgPose[1] / len(robotPose), avgPose[2] / len(robotPose))
-        robotPos = Pose3d(Translation3d(avgPose[0],avgPose[1],avgPose[2]),Rotation3d())
-
     # Publish everything
     outputStream.putFrame(mat)
     tagRotation.set(bestPose.rotation().z)
