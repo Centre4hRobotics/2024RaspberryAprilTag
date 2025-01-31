@@ -1,5 +1,5 @@
 import json
-from cscore import CameraServer
+from cscore import CameraServer, VideoSource
 import ntcore
 import numpy
 import cv2
@@ -17,20 +17,20 @@ cameraProfile = "640x480"
 # Flags and Team Number
 isTableHost = True
 teamNumber = 7204
-
+print("1")
 # Loading the AprilTag data
 aprilTagFieldLayout = robotpy_apriltag.AprilTagFieldLayout("TagPoses.json")
-
+print("2")
 # Load camera data
 Fx = data[cameraProfile]["Intrinsics"]["Fx"]
 Fy = data[cameraProfile]["Intrinsics"]["Fy"]
 Cx = data[cameraProfile]["Intrinsics"]["Cx"]
 Cy = data[cameraProfile]["Intrinsics"]["Cy"]
-
+print("3")
 xResolution = data[cameraProfile]["Resolution"]["x"]
 yResolution = data[cameraProfile]["Resolution"]["y"]
 frameRate = 30
-
+print("4")
 poseEstimatorConfig = robotpy_apriltag.AprilTagPoseEstimator.Config(
 	0.1651,  #tag size in meters
 	Fx,
@@ -38,7 +38,7 @@ poseEstimatorConfig = robotpy_apriltag.AprilTagPoseEstimator.Config(
 	Cx,
 	Cy,
 )
-
+print("5")
 cameraDistortion = numpy.float32([
     data[cameraProfile]["Distortion"]["A"],
     data[cameraProfile]["Distortion"]["B"],
@@ -50,37 +50,38 @@ cameraIntrinsics[0][0] = Fx
 cameraIntrinsics[1][1] = Fy
 cameraIntrinsics[0][2] = Cx
 cameraIntrinsics[1][2] = Cy
-
+print("6")
 # Create the PoseEstimator & adjust its settings
 poseEstimator = robotpy_apriltag.AprilTagPoseEstimator(poseEstimatorConfig)
-
+print("7")
 aprilTagDetector = robotpy_apriltag.AprilTagDetector()
 aprilTagDetector.addFamily("tag36h11", 3)
-
+print("8")
 aprilTagDetectorConfig = aprilTagDetector.getConfig()
 aprilTagDetectorConfig.numThreads = 4
 aprilTagDetectorConfig.quadSigma = 0.5
 aprilTagDetectorConfig.quadDecimate = 1
 aprilTagDetector.setConfig(aprilTagDetectorConfig)
-
+print("9")
 quadThresholdParameters = aprilTagDetector.getQuadThresholdParameters()
 quadThresholdParameters.minClusterPixels = 5
 quadThresholdParameters.criticalAngle = 0.79
 aprilTagDetector.setQuadThresholdParameters(quadThresholdParameters)
-
+print("10")
 
 # Creating the network tables
 ntInstance = ntcore.NetworkTableInstance.getDefault()
-
+print("12")
 # Check network tables host flag
 if isTableHost:
     ntInstance.startServer()
+    print("13")
 else:
     ntInstance.setServerTeam(teamNumber)
     ntInstance.startClient4("visionPi")
 
 table = ntInstance.getTable("AprilTag Vision")
-
+print("14")
 # Export robot position
 localPosX = table.getDoubleTopic("Pose X").publish()
 localPosY = table.getDoubleTopic("Pose Y").publish()
@@ -88,29 +89,35 @@ localPosZ = table.getDoubleTopic("Pose Z").publish()
 tagRotation = table.getDoubleTopic("Tag Rotation").publish()
 aprilTagPresence = table.getBooleanTopic("AprilTag Presence").publish()
 widestTag = table.getIntegerTopic("Widest Tag ID").publish()
+camera = table.getBooleanTopic("Using Left Camera").publish()
+camera.set(True)
+leftCameraA = table.getBooleanTopic("Using Left Camera")
+leftCameraB = leftCameraA.subscribe(True)
+leftCameraStr = leftCameraB.get()
 
 # Activate camera stuff
-
+print("a")
 CameraServer.enableLogging()
+
 cameraLeft = CameraServer.startAutomaticCapture(0)
+
 cameraRight = CameraServer.startAutomaticCapture(1)
-cameraLeft.setConnectionStrategy(VideoSource.ConnectionStrategy.kConnectionKeepOpen)
-cameraRight.setConnectionStrategy(VideoSource.ConnectionStrategy.kConnectionKeepOpen)
-CameraServer.waitForever()
+
+print("b")
 
 cameraLeft.setResolution(xResolution, yResolution)
-cameraRight.setResolution(xResolution, yResolution)
-
 cameraLeft.setFPS(frameRate)
+
+print("c")
+cameraRight.setResolution(xResolution, yResolution)
 cameraRight.setFPS(frameRate)
-
-cvSink = CameraServer.getVideo(cameraLeft)
+print("d")
 outputStream = CameraServer.putVideo("Vision", xResolution, yResolution)
-
+print("e")
 # Images
 mat = numpy.zeros(shape=(xResolution, yResolution, 3), dtype=numpy.uint8)
 grayMat = numpy.zeros(shape=(xResolution, yResolution), dtype=numpy.uint8)
-
+print("f")
 # Colors for drawing
 lineColor = (0,255,0)
 
@@ -126,17 +133,18 @@ reefTags = [17]
 # Main loop
 while True:
     maxTagWidth = 0.0
-    robotPose = []
-    avgPose = (0,0,0)
-
-    if leftCamera:
+    print("g")
+    if leftCameraStr:
         cvSink = CameraServer.getVideo(cameraLeft)
+        print("h left")
     else:
         cvSink = CameraServer.getVideo(cameraRight)
+        print("h right")
+    print("i")
 
-
-    _, mat = cvSink.grabFrame(mat)
+    mat = cvSink.grabFrame(mat)
     grayMat = cv2.cvtColor(mat, cv2.COLOR_RGB2GRAY)
+    print("j")
     detections = aprilTagDetector.detect(grayMat)
 
     if detections != []:
@@ -188,14 +196,6 @@ while True:
 
             if detection.getId() == bestTag:
                 bestPose = robotToTag
-
-            if tagPose is not None:
-                # We now have a corrected transform from the camera to the tag. Apply the inverse transform to the tag pose to get the camera's pose
-                cameraPose = tagPose.transformBy(robotToTag.inverse())
-
-                # compute robot pose from robot to camera transform
-                robotPose.append(cameraPose)
-
 
     # Set robotPos to the average position of all detections
     if robotPose:
