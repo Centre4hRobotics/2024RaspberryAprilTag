@@ -1,5 +1,5 @@
 import json
-from cscore import CameraServer, VideoSource
+from cscore import CameraServer
 import ntcore
 import numpy
 import cv2
@@ -7,30 +7,30 @@ import robotpy_apriltag
 from wpimath.units import rotationsToRadians
 from wpimath.geometry import Transform3d, Rotation3d, Pose3d, Translation3d, CoordinateSystem
 
+# Flags and Team Number
+IS_TABLE_HOST = True
+TEAM_NUMBER = 7204
 
+# Loading the AprilTag data
+aprilTagFieldLayout = robotpy_apriltag.AprilTagFieldLayout("TagPoses.json")
+
+# Load camera calibration
 with open('CameraCalibration.json') as json_data:
     data = json.load(json_data)
 
-cameraProfile = "640x480"
+CAMERA_PROFILE = "640x480"
 
+cameraData = data[CAMERA_PROFILE]
 
-# Flags and Team Number
-isTableHost = True
-teamNumber = 7204
-print("1")
-# Loading the AprilTag data
-aprilTagFieldLayout = robotpy_apriltag.AprilTagFieldLayout("TagPoses.json")
-print("2")
-# Load camera data
-Fx = data[cameraProfile]["Intrinsics"]["Fx"]
-Fy = data[cameraProfile]["Intrinsics"]["Fy"]
-Cx = data[cameraProfile]["Intrinsics"]["Cx"]
-Cy = data[cameraProfile]["Intrinsics"]["Cy"]
-print("3")
-xResolution = data[cameraProfile]["Resolution"]["x"]
-yResolution = data[cameraProfile]["Resolution"]["y"]
-frameRate = 30
-print("4")
+Fx = cameraData["Intrinsics"]["Fx"]
+Fy = cameraData["Intrinsics"]["Fy"]
+Cx = cameraData["Intrinsics"]["Cx"]
+Cy = cameraData["Intrinsics"]["Cy"]
+
+xResolution = cameraData["Resolution"]["x"]
+yResolution = cameraData["Resolution"]["y"]
+FRAME_RATE = 30
+
 poseEstimatorConfig = robotpy_apriltag.AprilTagPoseEstimator.Config(
 	0.1651,  #tag size in meters
 	Fx,
@@ -38,50 +38,50 @@ poseEstimatorConfig = robotpy_apriltag.AprilTagPoseEstimator.Config(
 	Cx,
 	Cy,
 )
-print("5")
+
 cameraDistortion = numpy.float32([
-    data[cameraProfile]["Distortion"]["A"],
-    data[cameraProfile]["Distortion"]["B"],
-    data[cameraProfile]["Distortion"]["C"],
-    data[cameraProfile]["Distortion"]["D"],
-    data[cameraProfile]["Distortion"]["E"] ])
+    cameraData["Distortion"]["A"],
+    cameraData["Distortion"]["B"],
+    cameraData["Distortion"]["C"],
+    cameraData["Distortion"]["D"],
+    cameraData["Distortion"]["E"] ])
 cameraIntrinsics = numpy.eye(3)
 cameraIntrinsics[0][0] = Fx
 cameraIntrinsics[1][1] = Fy
 cameraIntrinsics[0][2] = Cx
 cameraIntrinsics[1][2] = Cy
-print("6")
+
 # Create the PoseEstimator & adjust its settings
 poseEstimator = robotpy_apriltag.AprilTagPoseEstimator(poseEstimatorConfig)
-print("7")
+
 aprilTagDetector = robotpy_apriltag.AprilTagDetector()
 aprilTagDetector.addFamily("tag36h11", 3)
-print("8")
+
 aprilTagDetectorConfig = aprilTagDetector.getConfig()
 aprilTagDetectorConfig.numThreads = 4
 aprilTagDetectorConfig.quadSigma = 0.5
 aprilTagDetectorConfig.quadDecimate = 1
 aprilTagDetector.setConfig(aprilTagDetectorConfig)
-print("9")
+
 quadThresholdParameters = aprilTagDetector.getQuadThresholdParameters()
 quadThresholdParameters.minClusterPixels = 5
 quadThresholdParameters.criticalAngle = 0.79
 aprilTagDetector.setQuadThresholdParameters(quadThresholdParameters)
-print("10")
+
 
 # Creating the network tables
 ntInstance = ntcore.NetworkTableInstance.getDefault()
-print("12")
+
 # Check network tables host flag
-if isTableHost:
+if IS_TABLE_HOST:
     ntInstance.startServer()
-    print("13")
+
 else:
-    ntInstance.setServerTeam(teamNumber)
+    ntInstance.setServerTeam(TEAM_NUMBER)
     ntInstance.startClient4("visionPi")
 
 table = ntInstance.getTable("AprilTag Vision")
-print("14")
+
 # Export robot position
 localPosX = table.getDoubleTopic("Pose X").publish()
 localPosY = table.getDoubleTopic("Pose Y").publish()
@@ -89,34 +89,35 @@ localPosZ = table.getDoubleTopic("Pose Z").publish()
 tagRotation = table.getDoubleTopic("Tag Rotation").publish()
 aprilTagPresence = table.getBooleanTopic("AprilTag Presence").publish()
 widestTag = table.getIntegerTopic("Widest Tag ID").publish()
-camera = table.getBooleanTopic("Using Left Camera").publish()
-camera.set(True)
-leftCameraA = table.getBooleanTopic("Using Left Camera")
-leftCameraB = leftCameraA.subscribe(True)
-leftCameraStr = leftCameraB.get()
+cameraChoice = table.getStringTopic("Using Camera").publish()
+cameraChoice.set("LEFT")
+precameraString = table.getStringTopic("Using Camera")
+cameraString = precameraString.subscribe("BAD")
+
 
 # Activate camera stuff
-print("a")
+
 CameraServer.enableLogging()
-print("a1")
+
 cameraLeft = CameraServer.startAutomaticCapture(0)
-print("a2")
+
 cameraRight = CameraServer.startAutomaticCapture(2)
 
-print("b")
-
 cameraLeft.setResolution(xResolution, yResolution)
-cameraLeft.setFPS(frameRate)
-print("c")
+cameraLeft.setFPS(FRAME_RATE)
+
 cameraRight.setResolution(xResolution, yResolution)
-cameraRight.setFPS(frameRate)
-print("d")
+cameraRight.setFPS(FRAME_RATE)
+
+cvSinkLeft = CameraServer.getVideo(cameraLeft)
+cvSinkRight = CameraServer.getVideo(cameraRight)
+
 outputStream = CameraServer.putVideo("Vision", xResolution, yResolution)
-print("e")
+
 # Images
 mat = numpy.zeros(shape=(xResolution, yResolution, 3), dtype=numpy.uint8)
 grayMat = numpy.zeros(shape=(xResolution, yResolution), dtype=numpy.uint8)
-print("f")
+
 # Colors for drawing
 lineColor = (0,255,0)
 
@@ -132,19 +133,15 @@ reefTags = [17]
 # Main loop
 while True:
     maxTagWidth = 0.0
-    print("g")
-    if leftCameraStr:
-        cvSink = CameraServer.getVideo(cameraLeft)
-        print("h left")
-    else:
-        cvSink = CameraServer.getVideo(cameraRight)
-        print("h right")
-    print("i")
 
-    _, mat = cvSink.grabFrame(mat)
-    print("k")
+    if cameraString.get() == "LEFT":
+        _, mat = cvSinkLeft.grabFrame(mat)
+
+    else:
+        _, mat = cvSinkRight.grabFrame(mat)
+
     grayMat = cv2.cvtColor(mat, cv2.COLOR_RGB2GRAY)
-    print("j")
+
     detections = aprilTagDetector.detect(grayMat)
 
     if detections != []:
@@ -197,7 +194,6 @@ while True:
             if detection.getId() == bestTag:
                 bestPose = robotToTag
 
-    # Set robotPos to the average position of all detections
     # Publish everything
     outputStream.putFrame(mat)
     tagRotation.set(bestPose.rotation().z)
