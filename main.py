@@ -7,7 +7,7 @@ import robotpy_apriltag
 from wpimath.units import rotationsToRadians
 from wpimath.geometry import Transform3d, Rotation3d, Pose3d, Translation3d, CoordinateSystem
 
-# Flags and Team Number
+#  Flags and Team Number
 IS_TABLE_HOST = True
 TEAM_NUMBER = 7204
 
@@ -105,9 +105,11 @@ cameraRight = CameraServer.startAutomaticCapture(2)
 
 cameraLeft.setResolution(xResolution, yResolution)
 cameraLeft.setFPS(FRAME_RATE)
+cameraLeft.setExposureManual(60)
 
 cameraRight.setResolution(xResolution, yResolution)
 cameraRight.setFPS(FRAME_RATE)
+cameraRight.setExposureManual(60)
 
 cvSinkLeft = CameraServer.getVideo(cameraLeft)
 cvSinkRight = CameraServer.getVideo(cameraRight)
@@ -146,7 +148,7 @@ while True:
 
     if detections != []:
         for detection in detections:
-            if not detection.getId() in reefTags:
+            if False:
                 continue
             tagPose = aprilTagFieldLayout.getTagPose(detection.getId())
 
