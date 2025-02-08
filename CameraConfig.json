@@ -11,7 +11,23 @@
         },
         {
             "name": "exposure_time_absolute",
-            "value": 156
+            "value": 60
+        },
+        {
+            "name": "gamma",
+            "value": 72
+        },
+        {
+            "name":"gain",
+            "value":0
+        },
+        {
+            "name": "brightness",
+            "value":0
+        },
+        {
+            "name": "contrast",
+            "value":64
         }
     ]
 }

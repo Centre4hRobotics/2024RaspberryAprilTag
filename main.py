@@ -8,7 +8,7 @@ from wpimath.units import rotationsToRadians
 from wpimath.geometry import Transform3d, Rotation3d, Pose3d, Translation3d, CoordinateSystem
 
 #  Flags and Team Number
-IS_TABLE_HOST = False
+IS_TABLE_HOST = True
 TEAM_NUMBER = 7204
 
 # Loading the AprilTag data
