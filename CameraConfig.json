@@ -1,0 +1,17 @@
+{
+    "fps": 30,
+    "width": 640,
+    "height": 480,
+    "pixel format": "mjpeg",
+    "exposure": "hold",
+    "properties": [
+        {
+            "name": "auto_exposure",
+            "value": 1
+        },
+        {
+            "name": "exposure_time_absolute",
+            "value": 156
+        }
+    ]
+}

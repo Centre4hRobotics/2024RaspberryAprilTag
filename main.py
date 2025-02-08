@@ -8,7 +8,7 @@ from wpimath.units import rotationsToRadians
 from wpimath.geometry import Transform3d, Rotation3d, Pose3d, Translation3d, CoordinateSystem
 
 #  Flags and Team Number
-IS_TABLE_HOST = True
+IS_TABLE_HOST = False
 TEAM_NUMBER = 7204
 
 # Loading the AprilTag data
@@ -103,13 +103,11 @@ cameraLeft = CameraServer.startAutomaticCapture(0)
 
 cameraRight = CameraServer.startAutomaticCapture(2)
 
-cameraLeft.setResolution(xResolution, yResolution)
-cameraLeft.setFPS(FRAME_RATE)
-cameraLeft.setExposureManual(60)
+with open('CameraConfig.json') as json_data:
+    cameraConfigJson = json.load(json_data)
 
-cameraRight.setResolution(xResolution, yResolution)
-cameraRight.setFPS(FRAME_RATE)
-cameraRight.setExposureManual(60)
+cameraLeft.setConfigJson(cameraConfigJson)
+cameraRight.setConfigJson(cameraConfigJson)
 
 cvSinkLeft = CameraServer.getVideo(cameraLeft)
 cvSinkRight = CameraServer.getVideo(cameraRight)
