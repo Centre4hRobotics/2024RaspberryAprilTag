@@ -2,7 +2,7 @@
     "fps": 30,
     "width": 640,
     "height": 480,
-    "pixel format": "mjpeg",
+    "pixel format": "MJPEG",
     "exposure": "hold",
     "properties": [
         {
@@ -11,15 +11,11 @@
         },
         {
             "name": "exposure_time_absolute",
-            "value": 60
+            "value": 156
         },
         {
             "name": "gamma",
             "value": 72
-        },
-        {
-            "name":"gain",
-            "value":0
         },
         {
             "name": "brightness",
