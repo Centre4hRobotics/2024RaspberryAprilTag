@@ -83,6 +83,7 @@ else:
 table = ntInstance.getTable("AprilTag Vision")
 
 # Export robot position
+robotGlobal = table.getDoubleTopic("Robot Global Pose").publish()
 localPosX = table.getDoubleTopic("Pose X").publish()
 localPosY = table.getDoubleTopic("Pose Y").publish()
 localPosZ = table.getDoubleTopic("Pose Z").publish()
@@ -124,6 +125,7 @@ lineColor = (0,255,0)
 # Position of the robot relative to the camera
 robotToCam = Transform3d(Translation3d(0,0,0),Rotation3d())
 
+robotPose = []
 robotPos = Pose3d()
 bestPose = Pose3d()
 bestTag = -1
@@ -132,6 +134,7 @@ reefTags = [17]
 
 # Main loop
 while True:
+    robotPos = (0,0,0)
     maxTagWidth = 0.0
 
     if cameraString.get() == "LEFT":
@@ -189,12 +192,24 @@ while True:
             # The Camera To Tag transform is in a East/Down/North coordinate system, but we want it in the WPILib standard North/West/Up
             cameraToTag = CoordinateSystem.convert(cameraToTag, CoordinateSystem.EDN(), CoordinateSystem.NWU())
 
-            robotToTag = robotToCam + cameraToTag
-
             if detection.getId() == bestTag:
-                bestPose = robotToTag
+                bestPose = cameraToTag
+
+            cameraPose = tagPose.transformBy(cameraToTag.inverse())
+
+			# compute robot pose from robot to camera transform
+            robotPose.append(cameraPose.transformBy(robotToCam.inverse()))
+
+    for pose in robotPose:
+        robotPos[0] += pose.x
+        robotPos[1] += pose.y
+        robotPos[2] += pose.z
+    robotPos[0] /= len(robotPose)
+    robotPos[1] /= len(robotPose)
+    robotPos[2] /= len(robotPose)
 
     # Publish everything
+    robotGlobal.set((robotPos[0],robotPos[1],robotPos[2]))
     outputStream.putFrame(mat)
     tagRotation.set(bestPose.rotation().z)
     localPosX.set(bestPose.x)
