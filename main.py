@@ -1,10 +1,11 @@
 import json
+import math
 from cscore import CameraServer
 import ntcore
 import numpy
 import cv2
 import robotpy_apriltag
-from wpimath.units import rotationsToRadians
+#import wpimath.units
 from wpimath.geometry import Transform3d, Rotation3d, Pose3d, Translation3d, CoordinateSystem
 
 #  Flags and Team Number
@@ -83,13 +84,22 @@ else:
 table = ntInstance.getTable("AprilTag Vision")
 
 # Export robot position
-robotGlobal = table.getDoubleTopic("Robot Global Pose").publish()
+
+# Global position of the robot
+robotX = table.getDoubleTopic("Global X").publish()
+robotY = table.getDoubleTopic("Global Y").publish()
+#robotZ = table.getDoubleTopic("Global Z").publish()
+
+# Position of the camera relative to the tag
 localPosX = table.getDoubleTopic("Pose X").publish()
 localPosY = table.getDoubleTopic("Pose Y").publish()
-localPosZ = table.getDoubleTopic("Pose Z").publish()
+#localPosZ = table.getDoubleTopic("Pose Z").publish()
 tagRotation = table.getDoubleTopic("Tag Rotation").publish()
+
 aprilTagPresence = table.getBooleanTopic("AprilTag Presence").publish()
+
 widestTag = table.getIntegerTopic("Widest Tag ID").publish()
+
 cameraChoice = table.getStringTopic("Using Camera").publish()
 cameraChoice.set("LEFT")
 precameraString = table.getStringTopic("Using Camera")
@@ -123,7 +133,8 @@ grayMat = numpy.zeros(shape=(xResolution, yResolution), dtype=numpy.uint8)
 lineColor = (0,255,0)
 
 # Position of the robot relative to the camera
-robotToCam = Transform3d(Translation3d(0,0,0),Rotation3d())
+robotToCamLeft = Transform3d(Translation3d(0,0,0),Rotation3d())
+robotToCamRight = Transform3d(Translation3d(0,0,0),Rotation3d())
 
 robotPose = []
 robotPos = Pose3d()
@@ -149,8 +160,7 @@ while True:
 
     if detections != []:
         for detection in detections:
-            if False:
-                continue
+
             tagPose = aprilTagFieldLayout.getTagPose(detection.getId())
 
             corners = list(detection.getCorners(numpy.empty(8)))
@@ -186,20 +196,25 @@ while True:
             tagID = detection.getId()
 
             # first we need to flip the Camera To Tag transform's angle 180 degrees around the y axis since the tag is oriented into the field
-            flipTagRotation = Rotation3d(axis = (0, 1, 0), angle = rotationsToRadians(0.5))
+            flipTagRotation = Rotation3d(axis = (0, 1, 0), angle = math.pi)
             cameraToTag = Transform3d(cameraToTag.translation(), cameraToTag.rotation().rotateBy(flipTagRotation))
 
             # The Camera To Tag transform is in a East/Down/North coordinate system, but we want it in the WPILib standard North/West/Up
             cameraToTag = CoordinateSystem.convert(cameraToTag, CoordinateSystem.EDN(), CoordinateSystem.NWU())
 
-            if detection.getId() == bestTag:
+            # Check if this tag is both the current best, and is in reefTags
+            if detection.getId() == bestTag and detection.getId() in reefTags:
                 bestPose = cameraToTag
 
             cameraPose = tagPose.transformBy(cameraToTag.inverse())
 
 			# compute robot pose from robot to camera transform
-            robotPose.append(cameraPose.transformBy(robotToCam.inverse()))
+            if cameraString.get() == "LEFT":
+                cameraPose.transformBy(robotToCamLeft.inverse())
+            else:
+                cameraPose.transformBy(robotToCamRight.inverse())
 
+    # Average positions of all detected tags
     for pose in robotPose:
         robotPos[0] += pose.x
         robotPos[1] += pose.y
@@ -208,13 +223,22 @@ while True:
     robotPos[1] /= len(robotPose)
     robotPos[2] /= len(robotPose)
 
+
     # Publish everything
-    robotGlobal.set((robotPos[0],robotPos[1],robotPos[2]))
-    outputStream.putFrame(mat)
+
+    outputStream.putFrame(grayMat)
+
+    # Publish global position
+    robotX.set(robotPos[0])
+    robotY.set(robotPos[1])
+    #robotZ.set(robotPos.z)
+    
+    # Publish local position & rotation
     tagRotation.set(bestPose.rotation().z)
     localPosX.set(bestPose.x)
     localPosY.set(bestPose.y)
-    localPosZ.set(bestPose.z)
+    #localPosZ.set(bestPose.z)
 
+    # Other
     aprilTagPresence.set(detections != [])
     widestTag.set(bestTag)
