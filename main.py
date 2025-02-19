@@ -215,13 +215,14 @@ while True:
                 cameraPose.transformBy(robotToCamRight.inverse())
 
     # Average positions of all detected tags
-    for pose in robotPose:
-        robotPos[0] += pose.x
-        robotPos[1] += pose.y
-        robotPos[2] += pose.z
-    robotPos[0] /= len(robotPose)
-    robotPos[1] /= len(robotPose)
-    robotPos[2] /= len(robotPose)
+    if not len(robotPose) == 0:
+        for pose in robotPose:
+            robotPos[0] += pose.x
+            robotPos[1] += pose.y
+            robotPos[2] += pose.z
+        robotPos[0] /= len(robotPose)
+        robotPos[1] /= len(robotPose)
+        robotPos[2] /= len(robotPose)
 
 
     # Publish everything
