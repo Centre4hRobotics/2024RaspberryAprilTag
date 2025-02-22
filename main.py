@@ -9,7 +9,7 @@ import robotpy_apriltag
 from wpimath.geometry import Transform3d, Rotation3d, Pose3d, Translation3d, CoordinateSystem
 
 #  Flags and Team Number
-IS_TABLE_HOST = False
+IS_TABLE_HOST = True
 TEAM_NUMBER = 7204
 
 # Loading the AprilTag data
@@ -91,10 +91,10 @@ robotY = table.getDoubleTopic("Global Y").publish()
 #robotZ = table.getDoubleTopic("Global Z").publish()
 
 # Position of the camera relative to the tag
-localPosX = table.getDoubleTopic("Pose X").publish()
-localPosY = table.getDoubleTopic("Pose Y").publish()
+#localPosX = table.getDoubleTopic("Pose X").publish()
+#localPosY = table.getDoubleTopic("Pose Y").publish()
 #localPosZ = table.getDoubleTopic("Pose Z").publish()
-tagRotation = table.getDoubleTopic("Tag Rotation").publish()
+#tagRotation = table.getDoubleTopic("Tag Rotation").publish()
 
 # tag to camera transform (this is more useful than the raw pose)
 tagToCameraX = table.getDoubleTopic("TagToCamera X").publish()
@@ -218,59 +218,70 @@ while True:
             # The Camera To Tag transform is in a East/Down/North coordinate system, but we want it in the WPILib standard North/West/Up
             cameraToTag = CoordinateSystem.convert(cameraToTag, CoordinateSystem.EDN(), CoordinateSystem.NWU())
             tagToCamera = cameraToTag.inverse()
-            
-            # Check if this tag is both the current best, and is in reefTags
-            if detection.getId() == bestTag and detection.getId() in reefTags:
-                bestPose = cameraToTag
-                bestTagCenterX = (2*detection.getCenter().x - xResolution)/xResolution
-                bestTagToCamera = tagToCamera
 
+            # Check if this tag is both the current best, and is in reefTags
+            if detection.getId() == bestTag :
+                # Report best global pose
+                if detection.getId() <= 22:
+                    if cameraString.get() == "LEFT":
+                        cameraPose.transformBy(robotToCamLeft.inverse())
+                        robotPose = cameraPose
+                    else:
+                        cameraPose.transformBy(robotToCamRight.inverse())
+                        robotPose = cameraPose
+
+                if detection.getId() in reefTags:
+                    #bestPose = cameraToTag
+                    bestTagCenterX = (2*detection.getCenter().x - xResolution)/xResolution
+                    bestTagToCamera = tagToCamera
+"""
             # Bill note: this line is dangerous. Sometimes the camera picks up
             # something weird it thinks is a tag with an ID not in the tag list
             # so tagPose was coming out null. That caused this to crash.
             # need to check this against null and handle it properly.
-            #cameraPose = tagPose.transformBy(cameraToTag.inverse())
+            cameraPose = tagPose.transformBy(cameraToTag.inverse())
 
 	    # compute robot pose from robot to camera transform
-            #if cameraString.get() == "LEFT":
-            #    cameraPose.transformBy(robotToCamLeft.inverse())
-            #else:
-            #    cameraPose.transformBy(robotToCamRight.inverse())
+            if cameraString.get() == "LEFT":
+                cameraPose.transformBy(robotToCamLeft.inverse())
+            else:
+                cameraPose.transformBy(robotToCamRight.inverse())
 
-    # Bil: We should not be averaging all of the tag poses. Just choose the best.
+    # Bill: We should not be averaging all of the tag poses. Just choose the best.
     # Average positions of all detected tags
-    #if not len(robotPose) == 0:
-    #    for pose in robotPose:
-    #        robotPos[0] += pose.x
-    #        robotPos[1] += pose.y
-    #        robotPos[2] += pose.z
-    #    robotPos[0] /= len(robotPose)
-    #    robotPos[1] /= len(robotPose)
-    #    robotPos[2] /= len(robotPose)
-
+    if not len(robotPose) == 0:
+        for pose in robotPose:
+            robotPos[0] += pose.x
+            robotPos[1] += pose.y
+            robotPos[2] += pose.z
+        robotPos[0] /= len(robotPose)
+        robotPos[1] /= len(robotPose)
+        robotPos[2] /= len(robotPose)
+"""
 
     # Publish everything
 
     outputStream.putFrame(mat)
 
     # Publish global position
-    #robotX.set(robotPos[0])
-    #robotY.set(robotPos[1])
-    #robotZ.set(robotPos.z)
+    robotX.set(robotPose.x)
+    robotY.set(robotPose.y)
+    #robotZ.set(robotPose.z)
     
     # Publish local position & rotation
-    tagRotation.set(bestPose.rotation().z)
-    localPosX.set(bestPose.x)
-    localPosY.set(bestPose.y)
+    #tagRotation.set(bestPose.rotation().z)
+    #localPosX.set(bestPose.x)
+    #localPosY.set(bestPose.y)
     #localPosZ.set(bestPose.z)
 
     tagToCameraX.set(bestTagToCamera.x)
     tagToCameraY.set(bestTagToCamera.y)
     theta = bestTagToCamera.rotation().z
-    if theta > 0:
-        theta -= math.pi
-    elif theta < 0:
-        theta += math.pi
+    #if theta > 0:
+    #    theta -= math.pi
+    #elif theta < 0:
+    #    theta += math.pi
+    theta -= (numpy.sign(theta) * math.pi)
     tagToCameraTheta.set(theta)
 
     # Other
