@@ -9,7 +9,7 @@ import robotpy_apriltag
 from wpimath.geometry import Transform3d, Rotation3d, Pose3d, Translation3d, CoordinateSystem
 
 #  Flags and Team Number
-IS_TABLE_HOST = True
+IS_TABLE_HOST = False
 TEAM_NUMBER = 7204
 
 # Loading the AprilTag data
