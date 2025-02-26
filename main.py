@@ -7,9 +7,10 @@ import cv2
 import robotpy_apriltag
 #import wpimath.units
 from wpimath.geometry import Transform3d, Rotation3d, Pose3d, Translation3d, CoordinateSystem
+import subprocess
 
 #  Flags and Team Number
-IS_TABLE_HOST = False
+IS_TABLE_HOST = True
 TEAM_NUMBER = 7204
 
 # Loading the AprilTag data
@@ -91,8 +92,8 @@ robotY = table.getDoubleTopic("Global Y").publish()
 #robotZ = table.getDoubleTopic("Global Z").publish()
 
 # Position of the camera relative to the tag
-localPosX = table.getDoubleTopic("Pose X").publish()
-localPosY = table.getDoubleTopic("Pose Y").publish()
+#localPosX = table.getDoubleTopic("Pose X").publish()
+#localPosY = table.getDoubleTopic("Pose Y").publish()
 #localPosZ = table.getDoubleTopic("Pose Z").publish()
 tagRotation = table.getDoubleTopic("Tag Rotation").publish()
 
@@ -125,11 +126,14 @@ cameraLeft = CameraServer.startAutomaticCapture(2)
 
 cameraRight = CameraServer.startAutomaticCapture(0)
 
-with open('CameraConfig.json') as json_data:
-    cameraConfigJson = json.load(json_data)
+rc = subprocess.call("chmod u+rx set_camera_settings.sh && /home/pi/2024RaspberryAprilTag/set_camera_settings.sh", shell = True)
+print("set_camera_settings.sh returned:", rc)
 
-cameraLeft.setConfigJson(cameraConfigJson)
-cameraRight.setConfigJson(cameraConfigJson)
+#with open('CameraConfig.json') as json_data:
+#    cameraConfigJson = json.load(json_data)
+
+#cameraLeft.setConfigJson(cameraConfigJson)
+#cameraRight.setConfigJson(cameraConfigJson)
 
 cvSinkLeft = CameraServer.getVideo(cameraLeft)
 cvSinkRight = CameraServer.getVideo(cameraRight)
@@ -147,14 +151,12 @@ lineColor = (0,255,0)
 robotToCamLeft = Transform3d(Translation3d(0,0,0),Rotation3d())
 robotToCamRight = Transform3d(Translation3d(0,0,0),Rotation3d())
 
-robotPose = []
-robotPos = Pose3d()
-bestPose = Pose3d()
+robotPose = Pose3d()
 bestTagToCamera = Transform3d()
 bestTagCenterX = 0
 bestTag = -1
 
-reefTags = [6,7,8,9,10,11,17,18,19,20,21,22]
+reefTags = [6,7,8,9,10,11,17,18,19,20,21,22,3]
 
 # Main loop
 while True:
@@ -218,12 +220,22 @@ while True:
             # The Camera To Tag transform is in a East/Down/North coordinate system, but we want it in the WPILib standard North/West/Up
             cameraToTag = CoordinateSystem.convert(cameraToTag, CoordinateSystem.EDN(), CoordinateSystem.NWU())
             tagToCamera = cameraToTag.inverse()
-            
+
             # Check if this tag is both the current best, and is in reefTags
-            if detection.getId() == bestTag and detection.getId() in reefTags:
-                bestPose = cameraToTag
-                bestTagCenterX = (2*detection.getCenter().x - xResolution)/xResolution
-                bestTagToCamera = tagToCamera
+            if detection.getId() == bestTag:
+
+                if detection.getId() in reefTags:
+                    bestTagCenterX = (2*detection.getCenter().x - xResolution)/xResolution
+                    bestTagToCamera = tagToCamera
+
+                if detection.getId() in range(0,22):
+                    if cameraString.get() == "LEFT":
+                        tagToCamera += (robotToCamLeft.inverse())
+                        robotPose = tagToCamera
+                    else:
+                        tagToCamera += (robotToCamRight.inverse())
+                        robotPose = tagToCamera
+
 
             # Bill note: this line is dangerous. Sometimes the camera picks up
             # something weird it thinks is a tag with an ID not in the tag list
@@ -237,40 +249,26 @@ while True:
             #else:
             #    cameraPose.transformBy(robotToCamRight.inverse())
 
-    # Bil: We should not be averaging all of the tag poses. Just choose the best.
-    # Average positions of all detected tags
-    #if not len(robotPose) == 0:
-    #    for pose in robotPose:
-    #        robotPos[0] += pose.x
-    #        robotPos[1] += pose.y
-    #        robotPos[2] += pose.z
-    #    robotPos[0] /= len(robotPose)
-    #    robotPos[1] /= len(robotPose)
-    #    robotPos[2] /= len(robotPose)
-
-
     # Publish everything
 
     outputStream.putFrame(mat)
 
     # Publish global position
-    #robotX.set(robotPos[0])
-    #robotY.set(robotPos[1])
-    #robotZ.set(robotPos.z)
-    
+    robotX.set(robotPose.x)
+    robotY.set(robotPose.y)
+#    robotZ.set(robotPose.z)
+
     # Publish local position & rotation
-    tagRotation.set(bestPose.rotation().z)
-    localPosX.set(bestPose.x)
-    localPosY.set(bestPose.y)
+    # tagRotation.set(bestPose.rotation().z)
+    # localPosX.set(bestPose.x)
+    # localPosY.set(bestPose.y)
     #localPosZ.set(bestPose.z)
 
     tagToCameraX.set(bestTagToCamera.x)
     tagToCameraY.set(bestTagToCamera.y)
     theta = bestTagToCamera.rotation().z
-    if theta > 0:
-        theta -= math.pi
-    elif theta < 0:
-        theta += math.pi
+
+    theta -= numpy.sign(theta) * math.pi
     tagToCameraTheta.set(theta)
 
     # Other

@@ -19,7 +19,7 @@
         },
         {
             "name": "brightness",
-            "value":0
+            "value":-64
         },
         {
             "name": "contrast",
