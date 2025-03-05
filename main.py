@@ -1,13 +1,13 @@
+import subprocess
 import json
 import math
-from cscore import CameraServer
 import ntcore
 import numpy
 import cv2
 import robotpy_apriltag
 #import wpimath.units
 from wpimath.geometry import Transform3d, Rotation3d, Pose3d, Translation3d, CoordinateSystem
-import subprocess
+from cscore import CameraServer
 
 #  Flags and Team Number
 IS_TABLE_HOST = True
@@ -95,7 +95,7 @@ robotY = table.getDoubleTopic("Global Y").publish()
 #localPosX = table.getDoubleTopic("Pose X").publish()
 #localPosY = table.getDoubleTopic("Pose Y").publish()
 #localPosZ = table.getDoubleTopic("Pose Z").publish()
-tagRotation = table.getDoubleTopic("Tag Rotation").publish()
+#tagRotation = table.getDoubleTopic("Tag Rotation").publish()
 
 # tag to camera transform (this is more useful than the raw pose)
 tagToCameraX = table.getDoubleTopic("TagToCamera X").publish()
@@ -108,10 +108,10 @@ tagCenterX = table.getDoubleTopic("Tag Center X").publish()
 
 aprilTagPresence = table.getBooleanTopic("AprilTag Presence").publish()
 
-widestTag = table.getIntegerTopic("Widest Tag ID").publish()
+centeredTag = table.getIntegerTopic("Best Tag ID").publish()
 
 cameraChoice = table.getStringTopic("Using Camera").publish()
-cameraChoice.set("LEFT")
+cameraChoice.set("LEoFT")
 precameraString = table.getStringTopic("Using Camera")
 cameraString = precameraString.subscribe("BAD")
 
@@ -122,23 +122,21 @@ CameraServer.enableLogging()
 
 # Bill note: The cameras were backwards. We need to figure out a way
 # to make sure that left is always left...
+# Sam: just swap em
 cameraLeft = CameraServer.startAutomaticCapture(2)
 
 cameraRight = CameraServer.startAutomaticCapture(0)
 
-rc = subprocess.call("chmod u+rx set_camera_settings.sh && /home/pi/2024RaspberryAprilTag/set_camera_settings.sh", shell = True)
-print("set_camera_settings.sh returned:", rc)
-
-#with open('CameraConfig.json') as json_data:
-#    cameraConfigJson = json.load(json_data)
-
-#cameraLeft.setConfigJson(cameraConfigJson)
-#cameraRight.setConfigJson(cameraConfigJson)
+cameraLeft.setResolution(xResolution, yResolution)
+cameraRight.setResolution(xResolution, yResolution)
 
 cvSinkLeft = CameraServer.getVideo(cameraLeft)
 cvSinkRight = CameraServer.getVideo(cameraRight)
 
 outputStream = CameraServer.putVideo("Vision", xResolution, yResolution)
+
+rc = subprocess.call("chmod u+rx set_camera_settings.sh && /home/pi/2024RaspberryAprilTag/set_camera_settings.sh", shell = True)
+print("set_camera_settings.sh returned:", rc)
 
 # Images
 mat = numpy.zeros(shape=(xResolution, yResolution, 3), dtype=numpy.uint8)
@@ -155,7 +153,7 @@ robotPose = Pose3d()
 bestTagToCamera = Transform3d()
 bestTagCenterX = 0
 bestTag = -1
-
+theta = 0
 reefTags = [6,7,8,9,10,11,17,18,19,20,21,22,3]
 
 # Main loop
@@ -176,9 +174,8 @@ while True:
     detections = aprilTagDetector.detect(grayMat)
 
     if detections != []:
+        minTagX = 100000
         for detection in detections:
-
-            tagPose = aprilTagFieldLayout.getTagPose(detection.getId())
 
             corners = list(detection.getCorners(numpy.empty(8)))
 
@@ -201,53 +198,47 @@ while True:
                 corners[2 * i] = undistortedCorners[i][0][0]
                 corners[2 * i + 1] = undistortedCorners[i][0][1]
 
-            # find the widest tag
-            if corners[2]-corners[0] > maxTagWidth:
-                maxTagWidth = corners[2]-corners[0]
-                bestTag = detection.getId()
+            if numpy.abs((2*detection.getCenter().x - xResolution)/xResolution) < minTagX:
+                minTagX = numpy.abs((2*detection.getCenter().x - xResolution)/xResolution)
+                bestDetection = detection
+                bestCorners = corners
 
-            # run the pose estimator using the fixed corners
-            cameraToTag = poseEstimator.estimate(
-                homography = detection.getHomography(),
-                corners = tuple(corners))
 
-            tagID = detection.getId()
+        # run the pose estimator using the fixed corners
+        cameraToTag = poseEstimator.estimate(
+            homography = bestDetection.getHomography(),
+            corners = tuple(bestCorners)
+        )
+
+        bestTag = bestDetection.getId()
 
             # first we need to flip the Camera To Tag transform's angle 180 degrees around the y axis since the tag is oriented into the field
-            flipTagRotation = Rotation3d(axis = (0, 1, 0), angle = math.pi)
-            cameraToTag = Transform3d(cameraToTag.translation(), cameraToTag.rotation().rotateBy(flipTagRotation))
+        flipTagRotation = Rotation3d(axis = (0, 1, 0), angle = math.pi)
+        cameraToTag = Transform3d(cameraToTag.translation(), cameraToTag.rotation().rotateBy(flipTagRotation))
 
-            # The Camera To Tag transform is in a East/Down/North coordinate system, but we want it in the WPILib standard North/West/Up
-            cameraToTag = CoordinateSystem.convert(cameraToTag, CoordinateSystem.EDN(), CoordinateSystem.NWU())
-            tagToCamera = cameraToTag.inverse()
+        # The Camera To Tag transform is in a East/Down/North coordinate system, but we want it in the WPILib standard North/West/Up
+        cameraToTag = CoordinateSystem.convert(cameraToTag, CoordinateSystem.EDN(), CoordinateSystem.NWU())
 
-            # Check if this tag is both the current best, and is in reefTags
-            if detection.getId() == bestTag:
+        tagToCamera = cameraToTag.inverse()
 
-                if detection.getId() in reefTags:
-                    bestTagCenterX = (2*detection.getCenter().x - xResolution)/xResolution
-                    bestTagToCamera = tagToCamera
+        # Check if this tag is both the current best, and is in reefTags
+        theta = tagToCamera.rotation().z
+        theta -= numpy.sign(theta) * math.pi
 
-                if detection.getId() in range(0,22):
-                    if cameraString.get() == "LEFT":
-                        tagToCamera += (robotToCamLeft.inverse())
-                        robotPose = tagToCamera
-                    else:
-                        tagToCamera += (robotToCamRight.inverse())
-                        robotPose = tagToCamera
+        if detection.getId() == bestTag and numpy.abs(theta) < 0.79:
+
+            if detection.getId() in reefTags:
+                bestTagCenterX = (2*detection.getCenter().x - xResolution)/xResolution
+                bestTagToCamera = tagToCamera
+
+            if detection.getId() in range(0,22):
+                if cameraString.get() == "LEFT":
+                    robotPose = tagToCamera + (robotToCamLeft.inverse())
+
+                else:
+                    robotPose = tagToCamera + (robotToCamRight.inverse())
 
 
-            # Bill note: this line is dangerous. Sometimes the camera picks up
-            # something weird it thinks is a tag with an ID not in the tag list
-            # so tagPose was coming out null. That caused this to crash.
-            # need to check this against null and handle it properly.
-            #cameraPose = tagPose.transformBy(cameraToTag.inverse())
-
-	    # compute robot pose from robot to camera transform
-            #if cameraString.get() == "LEFT":
-            #    cameraPose.transformBy(robotToCamLeft.inverse())
-            #else:
-            #    cameraPose.transformBy(robotToCamRight.inverse())
 
     # Publish everything
 
@@ -256,22 +247,20 @@ while True:
     # Publish global position
     robotX.set(robotPose.x)
     robotY.set(robotPose.y)
-#    robotZ.set(robotPose.z)
+    #robotZ.set(robotPose.z)
 
     # Publish local position & rotation
-    # tagRotation.set(bestPose.rotation().z)
-    # localPosX.set(bestPose.x)
-    # localPosY.set(bestPose.y)
+    #tagRotation.set(bestPose.rotation().z)
+    #localPosX.set(bestPose.x)
+    #localPosY.set(bestPose.y)
     #localPosZ.set(bestPose.z)
 
     tagToCameraX.set(bestTagToCamera.x)
     tagToCameraY.set(bestTagToCamera.y)
-    theta = bestTagToCamera.rotation().z
 
-    theta -= numpy.sign(theta) * math.pi
     tagToCameraTheta.set(theta)
 
     # Other
     aprilTagPresence.set(detections != [])
-    widestTag.set(bestTag)
+    centeredTag.set(bestTag)
     tagCenterX.set(bestTagCenterX)
