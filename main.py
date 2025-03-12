@@ -5,7 +5,7 @@ import ntcore
 import numpy
 import cv2
 import robotpy_apriltag
-#import wpimath.units
+# import wpimath.units
 from wpimath.geometry import Transform3d, Rotation3d, Pose3d, Translation3d, CoordinateSystem
 from cscore import CameraServer
 
@@ -108,10 +108,10 @@ tagCenterX = table.getDoubleTopic("Tag Center X").publish()
 
 aprilTagPresence = table.getBooleanTopic("AprilTag Presence").publish()
 
-centeredTag = table.getIntegerTopic("Best Tag ID").publish()
+centeredTag = table.getIntegerTopic("Widest Tag ID").publish()
 
 cameraChoice = table.getStringTopic("Using Camera").publish()
-cameraChoice.set("LEoFT")
+cameraChoice.set("LEFT")
 precameraString = table.getStringTopic("Using Camera")
 cameraString = precameraString.subscribe("BAD")
 
@@ -154,7 +154,7 @@ bestTagToCamera = Transform3d()
 bestTagCenterX = 0
 bestTag = -1
 theta = 0
-reefTags = [6,7,8,9,10,11,17,18,19,20,21,22,3]
+reefTags = [6,7,8,9,10,11,17,18,19,20,21,22]
 
 # Main loop
 while True:
@@ -175,9 +175,15 @@ while True:
 
     if detections != []:
         minTagX = 100000
+
         for detection in detections:
 
             corners = list(detection.getCorners(numpy.empty(8)))
+
+            # Remove detection if it is not a reef tag.
+            if detection.getId() not in reefTags:
+                detections.remove(detection)
+                continue # Move on to the next one or exit the for loop
 
             # Outline the tag using original corners
             for i in range(4):
@@ -212,7 +218,7 @@ while True:
 
         bestTag = bestDetection.getId()
 
-            # first we need to flip the Camera To Tag transform's angle 180 degrees around the y axis since the tag is oriented into the field
+        # first we need to flip the Camera To Tag transform's angle 180 degrees around the y axis since the tag is oriented into the field
         flipTagRotation = Rotation3d(axis = (0, 1, 0), angle = math.pi)
         cameraToTag = Transform3d(cameraToTag.translation(), cameraToTag.rotation().rotateBy(flipTagRotation))
 
@@ -227,16 +233,12 @@ while True:
 
         if detection.getId() == bestTag and numpy.abs(theta) < 0.79:
 
-            if detection.getId() in reefTags:
-                bestTagCenterX = (2*detection.getCenter().x - xResolution)/xResolution
-                bestTagToCamera = tagToCamera
-
-            if detection.getId() in range(0,22):
-                if cameraString.get() == "LEFT":
-                    robotPose = tagToCamera + (robotToCamLeft.inverse())
-
-                else:
-                    robotPose = tagToCamera + (robotToCamRight.inverse())
+            bestTagCenterX = (2 * detection.getCenter().x - xResolution) / xResolution
+            bestTagToCamera = tagToCamera
+            
+            aprilTagPresence.set(True)
+        else:
+            aprilTagPresence.set(False)
 
 
 
@@ -261,6 +263,6 @@ while True:
     tagToCameraTheta.set(theta)
 
     # Other
-    aprilTagPresence.set(detections != [])
+    # aprilTagPresence.set(detections != [])
     centeredTag.set(bestTag)
     tagCenterX.set(bestTagCenterX)
