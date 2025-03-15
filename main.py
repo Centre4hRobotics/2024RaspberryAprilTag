@@ -217,7 +217,7 @@ while True:
         )
 
         bestTag = bestDetection.getId()
-
+        
         # first we need to flip the Camera To Tag transform's angle 180 degrees around the y axis since the tag is oriented into the field
         flipTagRotation = Rotation3d(axis = (0, 1, 0), angle = math.pi)
         cameraToTag = Transform3d(cameraToTag.translation(), cameraToTag.rotation().rotateBy(flipTagRotation))
@@ -240,7 +240,30 @@ while True:
         else:
             aprilTagPresence.set(False)
 
+"""
+            # Bill note: this line is dangerous. Sometimes the camera picks up
+            # something weird it thinks is a tag with an ID not in the tag list
+            # so tagPose was coming out null. That caused this to crash.
+            # need to check this against null and handle it properly.
+            cameraPose = tagPose.transformBy(cameraToTag.inverse())
 
+	    # compute robot pose from robot to camera transform
+            if cameraString.get() == "LEFT":
+                cameraPose.transformBy(robotToCamLeft.inverse())
+            else:
+                cameraPose.transformBy(robotToCamRight.inverse())
+
+    # Bill: We should not be averaging all of the tag poses. Just choose the best.
+    # Average positions of all detected tags
+    if not len(robotPose) == 0:
+        for pose in robotPose:
+            robotPos[0] += pose.x
+            robotPos[1] += pose.y
+            robotPos[2] += pose.z
+        robotPos[0] /= len(robotPose)
+        robotPos[1] /= len(robotPose)
+        robotPos[2] /= len(robotPose)
+"""
 
     # Publish everything
 
@@ -250,7 +273,7 @@ while True:
     robotX.set(robotPose.x)
     robotY.set(robotPose.y)
     #robotZ.set(robotPose.z)
-
+    
     # Publish local position & rotation
     #tagRotation.set(bestPose.rotation().z)
     #localPosX.set(bestPose.x)
@@ -259,7 +282,7 @@ while True:
 
     tagToCameraX.set(bestTagToCamera.x)
     tagToCameraY.set(bestTagToCamera.y)
-
+    
     tagToCameraTheta.set(theta)
 
     # Other
