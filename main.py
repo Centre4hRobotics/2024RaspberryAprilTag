@@ -1,3 +1,5 @@
+""" This is the main file for FRC Team 4027's 2024 AprilTag Vision. """
+
 import subprocess
 import json
 import math
@@ -5,7 +7,7 @@ import ntcore
 import numpy
 import cv2
 import robotpy_apriltag
-from wpimath.geometry import Transform3d, Rotation3d, Pose3d, Translation3d, CoordinateSystem
+from wpimath.geometry import Transform3d, Rotation3d, Pose3d, CoordinateSystem
 from cscore import CameraServer
 
 #  All settings
@@ -18,7 +20,7 @@ CAMERA_PROFILE = "640x480"
 aprilTag_field_layout = robotpy_apriltag.AprilTagFieldLayout("TagPoses.json")
 
 # Load camera calibration
-with open('CameraCalibration.json') as json_data:
+with open('CameraCalibration.json', encoding="utf-8") as json_data:
     calibration_data = json.load(json_data)
 
 camera_data = calibration_data[CAMERA_PROFILE]
@@ -186,8 +188,8 @@ while True:
             distorted_corners[i][1] = corners[2 * i + 1]
 
         # run the OpenCV undistortion routine to fix the corners
-        undistorted_corners = cv2.undistortImagePoints(distorted_corners, 
-                                                       camera_intrinsics, 
+        undistorted_corners = cv2.undistortImagePoints(distorted_corners,
+                                                       camera_intrinsics,
                                                        camera_distortion)
         for i in range(4):
             corners[2 * i] = undistorted_corners[i][0][0]
@@ -212,13 +214,13 @@ while True:
         # First, we flip the camera_to_tag transform's angle 180 degrees around the y axis
         # since the tag is oriented into the field
         flip_tag_rotation = Rotation3d(axis = (0, 1, 0), angle = math.pi)
-        camera_to_tag = Transform3d(camera_to_tag.translation(), 
+        camera_to_tag = Transform3d(camera_to_tag.translation(),
                                     camera_to_tag.rotation().rotateBy(flip_tag_rotation))
 
         # The Camera To Tag transform is in a East/Down/North coordinate system,
         # but we want it in the WPILib standard North/West/Up
-        camera_to_tag = CoordinateSystem.convert(camera_to_tag, 
-                                                 CoordinateSystem.EDN(), 
+        camera_to_tag = CoordinateSystem.convert(camera_to_tag,
+                                                 CoordinateSystem.EDN(),
                                                  CoordinateSystem.NWU())
 
         tag_to_camera = camera_to_tag.inverse()
