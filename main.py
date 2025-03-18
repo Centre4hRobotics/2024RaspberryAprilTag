@@ -102,9 +102,9 @@ tag_to_camera_theta = table.getDoubleTopic("tag_to_camera Theta").publish()
 tag_center_x = table.getDoubleTopic("Tag Center X").publish()
 
 # Returns whether we have a tag
-aprilTag_presence = table.getBooleanTopic("AprilTag Presence").publish()
+apriltag_presence = table.getBooleanTopic("AprilTag Presence").publish()
 
-best_tag_ID_topic = table.getIntegerTopic("Best Tag ID").publish()
+best_tag_id_topic = table.getIntegerTopic("Best Tag ID").publish()
 
 camera_choice = table.getStringTopic("Using Camera").publish()
 camera_choice.set("LEFT")
@@ -139,7 +139,7 @@ gray_mat = numpy.zeros(shape=(x_resolution, y_resolution), dtype=numpy.uint8)
 # Colors for drawing
 line_color = (0,255,0)
 
-# 
+# Etc.
 robot_pose = Pose3d()
 best_tag_to_camera = Transform3d()
 best_tag_center_x = 0
@@ -163,43 +163,44 @@ while True:
 
     detections = aprilTag_detector.detect(gray_mat)
 
-    
     min_tag_x = 100000
 
     for detection in detections:
 
-            # Remove detection if it is not a reef tag.
-            if detection.getId() not in reef_tags:
-                continue # Move on to the next detection or exit the for loop
-            corners = list(detection.getCorners(numpy.empty(8)))
+        # Remove detection if it is not a reef tag.
+        if detection.getId() not in reef_tags:
+            continue # Move on to the next detection or exit the for loop
+        corners = list(detection.getCorners(numpy.empty(8)))
 
-            # Outline the tag using original corners
-            for i in range(4):
-                j = (i + 1) % 4
-                p1 = (int(corners[2 * i]),int(corners[2 * i + 1]))
-                p2 = (int(corners[2 * j]),int(corners[2 * j + 1]))
-                mat = cv2.line(mat, p1, p2, line_color, 2)
+        # Outline the tag using original corners
+        for i in range(4):
+            j = (i + 1) % 4
+            p1 = (int(corners[2 * i]),int(corners[2 * i + 1]))
+            p2 = (int(corners[2 * j]),int(corners[2 * j + 1]))
+            mat = cv2.line(mat, p1, p2, line_color, 2)
 
-            # Manually reshape 'corners'
-            distorted_corners = numpy.empty([4,2], dtype=numpy.float32)
-            for i in range(4):
-                distorted_corners[i][0] = corners[2 * i]
-                distorted_corners[i][1] = corners[2 * i + 1]
+        # Manually reshape 'corners'
+        distorted_corners = numpy.empty([4,2], dtype=numpy.float32)
+        for i in range(4):
+            distorted_corners[i][0] = corners[2 * i]
+            distorted_corners[i][1] = corners[2 * i + 1]
 
-            # run the OpenCV undistortion routine to fix the corners
-            undistorted_corners = cv2.undistortImagePoints(distorted_corners, camera_intrinsics, camera_distortion)
-            for i in range(4):
-                corners[2 * i] = undistorted_corners[i][0][0]
-                corners[2 * i + 1] = undistorted_corners[i][0][1]
+        # run the OpenCV undistortion routine to fix the corners
+        undistorted_corners = cv2.undistortImagePoints(distorted_corners, 
+                                                       camera_intrinsics, 
+                                                       camera_distortion)
+        for i in range(4):
+            corners[2 * i] = undistorted_corners[i][0][0]
+            corners[2 * i + 1] = undistorted_corners[i][0][1]
 
-            if numpy.abs((2*detection.getCenter().x - x_resolution)/x_resolution) < min_tag_x:
-                min_tag_x = numpy.abs((2*detection.getCenter().x - x_resolution)/x_resolution)
-                best_detection = detection
-                best_Corners = corners
+        if numpy.abs((2*detection.getCenter().x - x_resolution)/x_resolution) < min_tag_x:
+            min_tag_x = numpy.abs((2*detection.getCenter().x - x_resolution)/x_resolution)
+            best_detection = detection
+            best_Corners = corners
 
-            has_tag = True
+        has_tag = True
 
-    if detections != []:
+    if has_tag:
         # run the pose estimator using the fixed corners
         camera_to_tag = pose_estimator.estimate(
         homography = best_detection.getHomography(),
@@ -211,11 +212,14 @@ while True:
         # First, we flip the camera_to_tag transform's angle 180 degrees around the y axis
         # since the tag is oriented into the field
         flip_tag_rotation = Rotation3d(axis = (0, 1, 0), angle = math.pi)
-        camera_to_tag = Transform3d(camera_to_tag.translation(), camera_to_tag.rotation().rotateBy(flip_tag_rotation))
+        camera_to_tag = Transform3d(camera_to_tag.translation(), 
+                                    camera_to_tag.rotation().rotateBy(flip_tag_rotation))
 
         # The Camera To Tag transform is in a East/Down/North coordinate system,
         # but we want it in the WPILib standard North/West/Up
-        camera_to_tag = CoordinateSystem.convert(camera_to_tag, CoordinateSystem.EDN(), CoordinateSystem.NWU())
+        camera_to_tag = CoordinateSystem.convert(camera_to_tag, 
+                                                 CoordinateSystem.EDN(), 
+                                                 CoordinateSystem.NWU())
 
         tag_to_camera = camera_to_tag.inverse()
 
@@ -248,6 +252,6 @@ while True:
     tag_to_camera_theta.set(theta)
 
     # Other
-    aprilTag_presence.set(has_tag)
-    best_tag_ID_topic.set(best_tag)
+    apriltag_presence.set(has_tag)
+    best_tag_id_topic.set(best_tag)
     tag_center_x.set(best_tag_center_x)
