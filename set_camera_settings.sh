@@ -28,17 +28,17 @@ v4l2-ctl -d 0 -c exposure_time_absolute=$exposure_time
 echo "Set cam0 exposure time to $exposure_time"
 
 v4l2-ctl -d 2 -c brightness=$brightness
-echo "Set cam0 brightness to $brightness"
+echo "Set cam2 brightness to $brightness"
 v4l2-ctl -d 2 -c contrast=$contrast
-echo "Set cam0 contrast to $contrast"
+echo "Set cam2 contrast to $contrast"
 v4l2-ctl -d 2 -c gamma=$gamma
-echo "Set cam0 gamma to $gamma"
+echo "Set cam2 gamma to $gamma"
 v4l2-ctl -d 2 -c gain=$gain
-echo "Set cam0 gain to $gain"
+echo "Set cam2 gain to $gain"
 v4l2-ctl -d 2 -c sharpness=$sharpness
-echo "Set cam0 sharpness to $sharpness"
+echo "Set cam2 sharpness to $sharpness"
 
 v4l2-ctl -d 2 -c auto_exposure=3
-echo "Set cam0 exposure to Auto"
+echo "Set cam2 exposure to Auto"
 v4l2-ctl -d 2 -c exposure_time_absolute=$exposure_time
-echo "Set cam0 exposure time to $exposure_time"
+echo "Set cam2 exposure time to $exposure_time"
