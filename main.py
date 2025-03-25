@@ -13,16 +13,7 @@ from cscore import CameraServer
 
 #  All settings
 
-# Read that file. If it's 0, then ethernet is not connected. If it's 1 ethernet is.
-with open('/sys/class/net/eth0/carrier/', encoding="utf-8") as ethernet_status:
-    if ethernet_status.read is not 0:
-        IS_TABLE_HOST = False
-        print("Detected Ethernet")
-    else:
-        IS_TABLE_HOST = True
-        print("Did not detect Ethernet")
-
-IS_TABLE_HOST = False # Override for auto detection of ethernet, comment out for default value
+IS_TABLE_HOST = False
 print("Is table host: " + IS_TABLE_HOST)
 
 TEAM_NUMBER = 4027
@@ -145,12 +136,7 @@ camera_choice = table.getStringTopic("Using Camera").publish()
 camera_choice.set("LEFT")
 
 camera_string = table.getStringTopic("Using Camera").subscribe("NO TABLE FOUND")
-"""
-camera_choice = table.getIntegerTopic("Using Camera").publish()
-camera_choice.set(0)
 
-camera_index = table.getIntegerTopic("Using Camera).subscribe(0)
-"""
 tag_choice_topic = table.getIntegerTopic("Tag Choice").publish()
 tag_choice_topic.set(0)
 
@@ -159,28 +145,6 @@ tag_choice = table.getIntegerTopic("Tag Choice").subscribe(0)
 # Activate camera stuff
 
 CameraServer.enableLogging()
-"""
-bad_camera = False
-index = 0
-good_cameras = []
-while not bad_camera:
-    capture = cv2.VideoCapture(index)
-    if capture is None or not capture.isOpened():
-        bad_camera = True
-    else:
-        good_cameras.append(index)
-        index += 2
-
-all_cv_sinks = []
-for camera in good_cameras:
-    temp_camera = CameraServer.startAutomaticCapture(camera)
-    temp_camera.setResolution(x_resolution,y_resolution)
-    all_cv_sinks.append(CameraServer.getVideo(temp_camera))
-
-    rc = subprocess.call("chmod u+rx set_camera_settings.sh "
-        + "&& /home/pi/2024RaspberryAprilTag/set_camera_settings.sh " + str(camera), shell = True)
-        print("set_camera_settings.sh for camera " + camera + " returned: ", rc)
-"""
 
 left_camera = CameraServer.startAutomaticCapture(2)
 
@@ -195,11 +159,7 @@ cv_sink_right = CameraServer.getVideo(right_camera)
 outputStream = CameraServer.putVideo("Vision", x_resolution, y_resolution)
 
 rc = subprocess.call("chmod u+rx set_camera_settings.sh "
-+ "&& /home/pi/2024RaspberryAprilTag/set_camera_settings.sh " + str(0), shell = True)
-print("set_camera_settings.sh returned: ", rc)
-
-rc = subprocess.call("chmod u+rx set_camera_settings.sh "
-+ "&& /home/pi/2024RaspberryAprilTag/set_camera_settings.sh " + str(2), shell = True)
++ "&& /home/pi/2024RaspberryAprilTag/set_camera_settings.sh", shell = True)
 print("set_camera_settings.sh returned: ", rc)
 
 # Images
@@ -212,7 +172,7 @@ best_color = (255,255,0)
 
 # Etc.
 robot_pose = Pose3d()
-robot_to_cam = Transform3d()
+#robot_to_cam = [Transform3d(), Transform3d()]
 best_tag_to_camera = Transform3d()
 best_tag_center_x = 0
 best_tag = -1
@@ -224,10 +184,6 @@ while True:
     all_tags = []
     min_tag_x = x_resolution + 1
     has_tag = False
-
-    """
-    _, mat = all_cv_sinks[camera_index.get].grabFrame(mat)
-    """
 
     if camera_string.get() == "LEFT":
         # grabFrame returns two values, the first of which we don't care about
@@ -286,7 +242,6 @@ while True:
             best_Corners = corners
 
         has_tag = True
-
 
     if has_tag:
         # run the pose estimator using the fixed corners
