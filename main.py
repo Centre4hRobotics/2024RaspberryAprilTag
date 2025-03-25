@@ -10,18 +10,38 @@ import robotpy_apriltag
 from wpimath.geometry import Transform3d, Rotation3d, Pose3d, CoordinateSystem
 from cscore import CameraServer
 
+
 #  All settings
-IS_TABLE_HOST = False
+
+# Read that file. If it's 0, then ethernet is not connected. If it's 1 ethernet is.
+with open('/sys/class/net/eth0/carrier/', encoding="utf-8") as ethernet_status:
+    if ethernet_status.read is not 0:
+        IS_TABLE_HOST = False
+        print("Detected Ethernet")
+    else:
+        IS_TABLE_HOST = True
+        print("Did not detect Ethernet")
+
+IS_TABLE_HOST = False # Override for auto detection of ethernet, comment out for default value
+print("Is table host: " + IS_TABLE_HOST)
+
 TEAM_NUMBER = 4027
+print("Team number " + TEAM_NUMBER)
+
 FRAME_RATE = 30
 CAMERA_PROFILE = "640x480"
+print("Using camera profile " + CAMERA_PROFILE + " at " + FRAME_RATE + "FPS")
+
 
 # Loading the AprilTag data
-aprilTag_field_layout = robotpy_apriltag.AprilTagFieldLayout("TagPoses.json")
+april_tag_field_layout = robotpy_apriltag.AprilTagFieldLayout("TagPoses.json")
+print("Loaded field layout")
+
 
 # Load camera calibration
 with open('CameraCalibration.json', encoding="utf-8") as json_data:
     calibration_data = json.load(json_data)
+    print("Opened CameraCalibration.json")
 
 camera_data = calibration_data[CAMERA_PROFILE]
 
@@ -54,22 +74,27 @@ camera_intrinsics[1][1] = Fy
 camera_intrinsics[0][2] = Cx
 camera_intrinsics[1][2] = Cy
 
-# Create the PoseEstimator & adjust its settings
+print("Set camera calibration data")
+
+
+# Create the april_tag_detector & adjust its settings
 pose_estimator = robotpy_apriltag.AprilTagPoseEstimator(pose_estimator_config)
 
-aprilTag_detector = robotpy_apriltag.AprilTagDetector()
-aprilTag_detector.addFamily("tag36h11", 3)
+april_tag_detector = robotpy_apriltag.AprilTagDetector()
+april_tag_detector.addFamily("tag36h11", 3)
 
-aprilTag_detector_config = aprilTag_detector.getConfig()
-aprilTag_detector_config.numThreads = 4
-aprilTag_detector_config.quadSigma = 0.5
-aprilTag_detector_config.quadDecimate = 1
-aprilTag_detector.setConfig(aprilTag_detector_config)
+april_tag_detector_config = april_tag_detector.getConfig()
+april_tag_detector_config.numThreads = 4
+april_tag_detector_config.quadSigma = 0.5
+april_tag_detector_config.quadDecimate = 1
+april_tag_detector.setConfig(april_tag_detector_config)
 
-quad_threshold_parameters = aprilTag_detector.getQuadThresholdParameters()
+quad_threshold_parameters = april_tag_detector.getQuadThresholdParameters()
 quad_threshold_parameters.minClusterPixels = 5
 quad_threshold_parameters.criticalAngle = 0.79
-aprilTag_detector.setQuadThresholdParameters(quad_threshold_parameters)
+april_tag_detector.setQuadThresholdParameters(quad_threshold_parameters)
+
+print("Created pose_estimator and april_tag_detector")
 
 
 # Creating the network tables
@@ -78,12 +103,15 @@ ntInstance = ntcore.NetworkTableInstance.getDefault()
 # Check network tables host flag
 if IS_TABLE_HOST:
     ntInstance.startServer()
+    print("Started network table server")
 
 else:
     ntInstance.setServerTeam(TEAM_NUMBER)
     ntInstance.startClient4("visionPi")
+    print("Started network table client")
 
 table = ntInstance.getTable("AprilTag Vision")
+
 
 # Export robot position
 
@@ -95,28 +123,64 @@ robot_y = table.getDoubleTopic("Global Y").publish()
 # Tag to camera transform (this is more useful than the raw pose)
 tag_to_camera_x = table.getDoubleTopic("tag_to_camera X").publish()
 tag_to_camera_y = table.getDoubleTopic("tag_to_camera Y").publish()
-tag_to_camera_z = table.getDoubleTopic("tag_to_camera Z").publish()
+#tag_to_camera_z = table.getDoubleTopic("tag_to_camera Z").publish()
 tag_to_camera_theta = table.getDoubleTopic("tag_to_camera Theta").publish()
 
-# Raw tag center (just the raw center of the tag with no pose estimation.
-# Should be more stable when we're fine tuning our pose)
-# Is a value from -1 to 1
+# Location of the tag on video feed (No pose estimation)
+# Returns values between -1 and 1
 tag_center_x = table.getDoubleTopic("Tag Center X").publish()
+#tag_center_Y = table.getDoubleTopic("Tag Center Y").publish()
+
+# Returns all visible Tags
+all_tags_topic = table.getIntegerArrayTopic("All Tags").publish()
 
 # Returns whether we have a tag
 apriltag_presence = table.getBooleanTopic("AprilTag Presence").publish()
 
+# Returns the best tag visible/which tag is being reported on
 best_tag_id_topic = table.getIntegerTopic("Best Tag ID").publish()
 
+# Tells which camera is being used. Can also be changed by others
 camera_choice = table.getStringTopic("Using Camera").publish()
 camera_choice.set("LEFT")
 
 camera_string = table.getStringTopic("Using Camera").subscribe("NO TABLE FOUND")
+"""
+camera_choice = table.getIntegerTopic("Using Camera").publish()
+camera_choice.set(0)
 
+camera_index = table.getIntegerTopic("Using Camera).subscribe(0)
+"""
+tag_choice_topic = table.getIntegerTopic("Tag Choice").publish()
+tag_choice_topic.set(0)
+
+tag_choice = table.getIntegerTopic("Tag Choice").subscribe(0)
 
 # Activate camera stuff
 
 CameraServer.enableLogging()
+"""
+bad_camera = False
+index = 0
+good_cameras = []
+while not bad_camera:
+    capture = cv2.VideoCapture(index)
+    if capture is None or not capture.isOpened():
+        bad_camera = True
+    else:
+        good_cameras.append(index)
+        index += 2
+
+all_cv_sinks = []
+for camera in good_cameras:
+    temp_camera = CameraServer.startAutomaticCapture(camera)
+    temp_camera.setResolution(x_resolution,y_resolution)
+    all_cv_sinks.append(CameraServer.getVideo(temp_camera))
+
+    rc = subprocess.call("chmod u+rx set_camera_settings.sh "
+        + "&& /home/pi/2024RaspberryAprilTag/set_camera_settings.sh " + str(camera), shell = True)
+        print("set_camera_settings.sh for camera " + camera + " returned: ", rc)
+"""
 
 left_camera = CameraServer.startAutomaticCapture(2)
 
@@ -131,7 +195,11 @@ cv_sink_right = CameraServer.getVideo(right_camera)
 outputStream = CameraServer.putVideo("Vision", x_resolution, y_resolution)
 
 rc = subprocess.call("chmod u+rx set_camera_settings.sh "
-+ "&& /home/pi/2024RaspberryAprilTag/set_camera_settings.sh", shell = True)
++ "&& /home/pi/2024RaspberryAprilTag/set_camera_settings.sh " + str(0), shell = True)
+print("set_camera_settings.sh returned: ", rc)
+
+rc = subprocess.call("chmod u+rx set_camera_settings.sh "
++ "&& /home/pi/2024RaspberryAprilTag/set_camera_settings.sh " + str(2), shell = True)
 print("set_camera_settings.sh returned: ", rc)
 
 # Images
@@ -140,9 +208,11 @@ gray_mat = numpy.zeros(shape=(x_resolution, y_resolution), dtype=numpy.uint8)
 
 # Colors for drawing
 line_color = (0,255,0)
+best_color = (255,255,0)
 
 # Etc.
 robot_pose = Pose3d()
+robot_to_cam = Transform3d()
 best_tag_to_camera = Transform3d()
 best_tag_center_x = 0
 best_tag = -1
@@ -151,27 +221,41 @@ reef_tags = [6,7,8,9,10,11,17,18,19,20,21,22]
 
 # Main loop
 while True:
+    all_tags = []
+    min_tag_x = x_resolution + 1
     has_tag = False
 
+    """
+    _, mat = all_cv_sinks[camera_index.get].grabFrame(mat)
+    """
+
     if camera_string.get() == "LEFT":
+        # grabFrame returns two values, the first of which we don't care about
         _, mat = cv_sink_left.grabFrame(mat)
 
     else:
         _, mat = cv_sink_right.grabFrame(mat)
 
-    # Bill: both cameras were upside down so I rotated them.
+    # Rotate video to not be upside down/on it's side
     mat = cv2.rotate(mat, cv2.ROTATE_180)
+
+    # Convert the video to grayscale
     gray_mat = cv2.cvtColor(mat, cv2.COLOR_RGB2GRAY)
 
-    detections = aprilTag_detector.detect(gray_mat)
-
-    min_tag_x = 100000
+    # Detect AprilTags
+    detections = april_tag_detector.detect(gray_mat)
 
     for detection in detections:
 
-        # Remove detection if it is not a reef tag.
+        all_tags.append(detection.getID)
+
+        if tag_choice.get() > 0 and not detection.getId() is tag_choice.get():
+            continue
+
+        # Ignore tags not in reef_tags
         if detection.getId() not in reef_tags:
             continue # Move on to the next detection or exit the for loop
+
         corners = list(detection.getCorners(numpy.empty(8)))
 
         # Outline the tag using original corners
@@ -191,6 +275,7 @@ while True:
         undistorted_corners = cv2.undistortImagePoints(distorted_corners,
                                                        camera_intrinsics,
                                                        camera_distortion)
+        
         for i in range(4):
             corners[2 * i] = undistorted_corners[i][0][0]
             corners[2 * i + 1] = undistorted_corners[i][0][1]
@@ -201,6 +286,7 @@ while True:
             best_Corners = corners
 
         has_tag = True
+
 
     if has_tag:
         # run the pose estimator using the fixed corners
@@ -231,7 +317,7 @@ while True:
 
         best_tag_center_x = (2 * best_detection.getCenter().x - x_resolution) / x_resolution
         best_tag_to_camera = tag_to_camera
-        best_color = (255,255,0)
+
         for i in range(4):
             j = (i + 1) % 4
             p1 = (int(best_Corners[2 * i]),int(best_Corners[2 * i + 1]))
@@ -250,10 +336,11 @@ while True:
     # Publish local position & rotation
     tag_to_camera_x.set(best_tag_to_camera.x)
     tag_to_camera_y.set(best_tag_to_camera.y)
-
+    #tag_to_camera_z.set(best_tag_to_camera.z)
     tag_to_camera_theta.set(theta)
 
     # Other
     apriltag_presence.set(has_tag)
     best_tag_id_topic.set(best_tag)
     tag_center_x.set(best_tag_center_x)
+    all_tags_topic.set(all_tags)
