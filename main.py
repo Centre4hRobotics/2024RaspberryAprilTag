@@ -173,7 +173,8 @@ while True:
 
     for detection in detections:
 
-        if tag_choice.get() > 0 and not detection.getId() is tag_choice.get():
+        tag = tag_choice.get()
+        if tag > 0 and detection.getId() != tag:
             continue
 
         # Remove detection if it is not a reef tag.
