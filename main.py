@@ -113,6 +113,10 @@ camera_choice.set("LEFT")
 
 camera_string = table.getStringTopic("Using Camera").subscribe("NO TABLE FOUND")
 
+tag_choice_topic = table.getIntegerTopic("Tag Choice").publish()
+tag_choice_topic.set(0)
+
+tag_choice = table.getIntegerTopic("Tag Choice").subscribe(0)
 
 # Activate camera stuff
 
@@ -168,6 +172,9 @@ while True:
     min_tag_x = 100000
 
     for detection in detections:
+
+        if tag_choice.get() > 0 and not detection.getId() is tag_choice.get():
+            continue
 
         # Remove detection if it is not a reef tag.
         if detection.getId() not in reef_tags:
