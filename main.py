@@ -93,10 +93,10 @@ robot_y = table.getDoubleTopic("Global Y").publish()
 #robot_z = table.getDoubleTopic("Global Z").publish()
 
 # Tag to camera transform (this is more useful than the raw pose)
-tag_to_camera_x = table.getDoubleTopic("tag_to_camera X").publish()
-tag_to_camera_y = table.getDoubleTopic("tag_to_camera Y").publish()
-tag_to_camera_z = table.getDoubleTopic("tag_to_camera Z").publish()
-tag_to_camera_theta = table.getDoubleTopic("tag_to_camera Theta").publish()
+tag_to_camera_x = table.getDoubleTopic("TagToCamera X").publish()
+tag_to_camera_y = table.getDoubleTopic("TagToCamera Y").publish()
+tag_to_camera_z = table.getDoubleTopic("TagToCamera Z").publish()
+tag_to_camera_theta = table.getDoubleTopic("TagToCamera Theta").publish()
 
 # Raw tag center (just the raw center of the tag with no pose estimation.
 # Should be more stable when we're fine tuning our pose)
